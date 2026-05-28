@@ -725,6 +725,19 @@ class ApplicationController < ActionController::Base
     return unless api_request?
 
     result = Redmine::RateLimit.check(request.remote_ip)
+
+    case result[:log]
+    when :overflow
+      logger.warn(
+        "[RateLimit] Store at capacity, skipping tracking for #{request.remote_ip}"
+      )
+    when :blocked
+      logger.warn(
+        "[RateLimit] Blocked #{request.remote_ip} in " \
+        "#{Setting.api_rate_limit_period}s window at #{Time.now}"
+      )
+    end
+
     return if result[:status] == :disabled || result[:status] == :untracked
 
     response.headers['X-RateLimit-Limit']     = Setting.api_rate_limit_max_requests.to_s

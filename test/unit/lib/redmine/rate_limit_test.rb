@@ -128,28 +128,37 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
       Redmine::RateLimit.check('10.0.0.2')
       Redmine::RateLimit.check('10.0.0.3')
 
-      # New IP when store is full with active entries — should fail open
+      # New IP when store is full with active entries — should fail open and signal overflow logging
       result = Redmine::RateLimit.check('10.0.0.99')
       assert_equal :untracked, result[:status]
+      assert_equal :overflow,  result[:log], "Overflow should set log: :overflow"
     end
   end
 
-  def test_first_block_logs_warn_once_per_window
+  def test_first_block_signals_log_flag
     with_rate_limit_settings(enabled: '1', max_requests: '2', period: '60') do
       2.times { Redmine::RateLimit.check('1.2.3.4') }
 
-      Rails.logger.expects(:warn).with(regexp_matches(/1\.2\.3\.4/)).once
-      Redmine::RateLimit.check('1.2.3.4')
+      result = Redmine::RateLimit.check('1.2.3.4')
+      assert_equal :denied,  result[:status]
+      assert_equal :blocked, result[:log], "First denial should set log: :blocked"
     end
   end
 
-  def test_subsequent_denials_do_not_duplicate_log
+  def test_subsequent_denials_do_not_repeat_log_flag
     with_rate_limit_settings(enabled: '1', max_requests: '2', period: '60') do
       2.times { Redmine::RateLimit.check('1.2.3.4') }
 
-      # Only the first denial should log
-      Rails.logger.expects(:warn).with(regexp_matches(/1\.2\.3\.4/)).once
-      5.times { Redmine::RateLimit.check('1.2.3.4') }
+      # First denial — signals logging
+      first = Redmine::RateLimit.check('1.2.3.4')
+      assert_equal :blocked, first[:log], "First denial should signal logging"
+
+      # Subsequent denials — no log flag
+      4.times do
+        result = Redmine::RateLimit.check('1.2.3.4')
+        assert_equal :denied, result[:status]
+        assert_nil result[:log], "Subsequent denials should not signal logging"
+      end
     end
   end
 

@@ -47,12 +47,8 @@ module Redmine
             if @data.size >= @max_size
               evict_stale!(now, period)
               if @data.size >= @max_size
-                Rails.logger.warn(
-                  "[RateLimit] Store at capacity (#{@max_size} entries), " \
-                  "skipping tracking for #{ip}"
-                )
                 reset_at = (now + period).ceil
-                return {status: :untracked, remaining: max_requests, reset_at: reset_at}
+                return {status: :untracked, remaining: max_requests, reset_at: reset_at, log: :overflow}
               end
             end
             record = IPRecord.new(0, 0, now, false)
@@ -81,15 +77,13 @@ module Redmine
           reset_at     = (record.window_start + period).ceil
 
           if approx_count >= max_requests
-            # Log the first block in this window only
+            # Signal the caller to log only the first block per window
+            log = nil
             unless record.logged_this_window
               record.logged_this_window = true
-              Rails.logger.warn(
-                "[RateLimit] Blocked IP #{ip}: #{approx_count.ceil} requests " \
-                "in #{period}s window at #{Time.now}"
-              )
+              log = :blocked
             end
-            return {status: :denied, remaining: 0, reset_at: reset_at}
+            return {status: :denied, remaining: 0, reset_at: reset_at, log: log}
           end
 
           record.curr_count += 1

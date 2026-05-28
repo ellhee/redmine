@@ -304,7 +304,7 @@ class SettingsControllerTest < Redmine::ControllerTest
   # --- API Rate Limiting settings (US2) ---
 
   def test_api_tab_shows_rate_limiting_fields
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     get :edit, :params => {:tab => 'api'}
     assert_response :success
     assert_select 'input[name=?]', 'settings[api_rate_limiting_enabled]'
@@ -314,7 +314,7 @@ class SettingsControllerTest < Redmine::ControllerTest
   end
 
   def test_save_rate_limit_settings_updates_values
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     post :edit, :params => {
       :tab => 'api',
       :settings => {
@@ -332,7 +332,7 @@ class SettingsControllerTest < Redmine::ControllerTest
   end
 
   def test_save_invalid_max_requests_shows_error
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     post :edit, :params => {
       :settings => {
         :api_rate_limiting_enabled   => '1',
@@ -346,7 +346,7 @@ class SettingsControllerTest < Redmine::ControllerTest
   end
 
   def test_save_invalid_period_shows_error
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     post :edit, :params => {
       :settings => {
         :api_rate_limiting_enabled   => '1',
@@ -360,7 +360,7 @@ class SettingsControllerTest < Redmine::ControllerTest
   end
 
   def test_save_invalid_max_ips_shows_error
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     post :edit, :params => {
       :settings => {
         :api_rate_limiting_enabled   => '1',
@@ -374,7 +374,7 @@ class SettingsControllerTest < Redmine::ControllerTest
   end
 
   def test_save_rate_limit_settings_resets_store
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     Setting.api_rate_limiting_enabled   = '1'
     Setting.api_rate_limit_max_requests = '1'
     Setting.api_rate_limit_period       = '300'

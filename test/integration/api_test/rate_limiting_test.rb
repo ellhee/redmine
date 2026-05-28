@@ -23,12 +23,12 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
   def setup
     super
     Setting.api_rate_limiting_enabled = '0'
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
   end
 
   def teardown
     Setting.api_rate_limiting_enabled = '0'
-    Redmine::RateLimit.reset_store!(max_size: 10_000)
+    Redmine::RateLimit.reset_store!
     super
   end
 
@@ -107,7 +107,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
       body_invalid_token = response.body
 
       # Reset store and exhaust limit again
-      Redmine::RateLimit.reset_store!(max_size: 10_000)
+      Redmine::RateLimit.reset_store!
       2.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }
 
       # Request with VALID token while over limit

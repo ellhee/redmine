@@ -56,20 +56,24 @@ module Redmine
           end
 
           # Slide the window if the current window has expired
+          now = Time.now.to_f
           elapsed = now - record.window_start
+
+          # 1. Normalize window if we moved forward
           if elapsed >= period
-            record.prev_count  = record.curr_count
-            record.curr_count  = 0
-            record.window_start += period
-            record.logged_this_window = false
-            elapsed = now - record.window_start
-            # Handle multiple expired periods (very long gaps)
-            if elapsed >= period
-              record.prev_count  = 0
-              record.curr_count  = 0
-              record.window_start = now
-              elapsed = 0.0
+            # how many full windows passed
+            windows_passed = (elapsed / period).floor
+
+            # shift previous counts forward
+            if windows_passed >= 1
+              # anything older than 1 window is discarded
+              record.prev_count = windows_passed >= 2 ? 0 : record.curr_count
+              record.curr_count = 0
+              record.window_start += windows_passed * period
+              record.logged_this_window = false
             end
+
+            elapsed = now - record.window_start
           end
 
           weight_prev  = (period - elapsed) / period.to_f

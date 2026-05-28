@@ -168,12 +168,11 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
       get '/issues.json', :headers => credentials('jsmith', 'jsmith')
       assert_response :too_many_requests
 
-      # Advance time past the window — capture now BEFORE stubbing
-      now = Time.now
-      Time.stubs(:now).returns(now + 61)
-
-      get '/issues.json', :headers => credentials('jsmith', 'jsmith')
-      assert_response :success, "Request should succeed after window expires"
+      # Advance time past the window
+      travel_to(61.seconds.from_now) do
+        get '/issues.json', :headers => credentials('jsmith', 'jsmith')
+        assert_response :success, "Request should succeed after window expires"
+      end
     end
   end
 

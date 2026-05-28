@@ -76,12 +76,10 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
       result_before = Redmine::RateLimit.check('1.2.3.4')
       assert_equal :denied, result_before[:status]
 
-      # Capture now BEFORE stubbing (stub activates immediately with nil default)
-      now = Time.now
-      Time.stubs(:now).returns(now + 61)
-
-      result_after = Redmine::RateLimit.check('1.2.3.4')
-      assert_equal :allowed, result_after[:status], "Request should be allowed after window expires"
+      travel_to(61.seconds.from_now) do
+        result_after = Redmine::RateLimit.check('1.2.3.4')
+        assert_equal :allowed, result_after[:status], "Request should be allowed after window expires"
+      end
     end
   end
 
@@ -92,15 +90,14 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
     with_rate_limit_settings(enabled: '1', max_requests: '10', period: '60') do
       10.times { Redmine::RateLimit.check('1.2.3.4') }
 
-      now = Time.now
-      # Advance by exactly one full period to roll over, then half a period into next window
-      Time.stubs(:now).returns(now + 90) # 60s window roll + 30s into new window
-
-      result = Redmine::RateLimit.check('1.2.3.4')
-      assert_equal :allowed, result[:status]
-      # After window shift: prev_count=10, curr_count=0, elapsed=30, weight=0.5
-      # approx = 10 * 0.5 + 0 = 5; remaining = max(0, 10 - floor(5)) = 5; after this check it's 4
-      assert result[:remaining] >= 0, "remaining should be non-negative"
+      # Advance by one full period to roll over, then half a period into next window (90s total)
+      travel_to(90.seconds.from_now) do
+        result = Redmine::RateLimit.check('1.2.3.4')
+        assert_equal :allowed, result[:status]
+        # After window shift: prev_count=10, curr_count=0, elapsed=30, weight=0.5
+        # approx = 10 * 0.5 + 0 = 5; remaining = max(0, 10 - floor(5)) = 5; after this check it's 4
+        assert result[:remaining] >= 0, "remaining should be non-negative"
+      end
     end
   end
 
@@ -115,13 +112,12 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
       assert_equal 3, Redmine::RateLimit.store_size
 
       # Advance time past the period so all entries become stale
-      now = Time.now
-      Time.stubs(:now).returns(now + 61)
-
-      # New IP should evict stale entries and be allowed
-      result = Redmine::RateLimit.check('10.0.0.99')
-      assert_equal :allowed, result[:status]
-      assert Redmine::RateLimit.store_size <= 3
+      travel_to(61.seconds.from_now) do
+        # New IP should evict stale entries and be allowed
+        result = Redmine::RateLimit.check('10.0.0.99')
+        assert_equal :allowed, result[:status]
+        assert Redmine::RateLimit.store_size <= 3
+      end
     end
   end
 

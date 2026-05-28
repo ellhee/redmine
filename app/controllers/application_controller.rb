@@ -734,7 +734,11 @@ class ApplicationController < ActionController::Base
     if result[:status] == :denied
       retry_after = [result[:reset_at] - Time.now.to_i, 1].max
       response.headers['Retry-After'] = retry_after.to_s
-      render_error :status => 429, :message => :error_rate_limit_exceeded
+      message = l(:error_rate_limit_exceeded)
+      respond_to do |format|
+        format.json { render :json => {:errors => [message]}, :status => :too_many_requests }
+        format.xml  { render :xml  => {:error => message}.to_xml(:root => 'errors'), :status => :too_many_requests }
+      end
     end
   end
 

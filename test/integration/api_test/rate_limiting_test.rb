@@ -121,6 +121,27 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
     end
   end
 
+  def test_429_json_body_contains_error_message
+    with_rate_limit_settings(max_requests: '2', period: '60') do
+      2.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }
+      get '/issues.json', :headers => credentials('jsmith', 'jsmith')
+      assert_response :too_many_requests
+      assert_equal 'application/json', response.media_type
+      body = response.parsed_body
+      assert_equal ['Rate limit exceeded. Please try again later.'], body['errors']
+    end
+  end
+
+  def test_429_xml_body_contains_error_message
+    with_rate_limit_settings(max_requests: '2', period: '60') do
+      2.times { get '/issues.xml', :headers => credentials('jsmith', 'jsmith') }
+      get '/issues.xml', :headers => credentials('jsmith', 'jsmith')
+      assert_response :too_many_requests
+      assert_equal 'application/xml', response.media_type
+      assert_select 'errors error', :text => 'Rate limit exceeded. Please try again later.'
+    end
+  end
+
   def test_valid_token_still_gets_429_when_limit_exceeded
     with_rate_limit_settings(max_requests: '3', period: '60') do
       3.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }

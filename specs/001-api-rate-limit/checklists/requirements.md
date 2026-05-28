@@ -1,36 +1,36 @@
-# Чеклист качества спецификации: Ограничение частоты запросов к API (Rate Limiting)
+# Specification Quality Checklist: API Rate Limiting
 
-**Назначение**: Проверка полноты и качества спецификации перед переходом к планированию
-**Создано**: 2026-05-28
-**Функциональность**: [spec.md](../spec.md)
+**Purpose**: Verify completeness and quality of the specification before moving to planning
+**Created**: 2026-05-28
+**Feature**: [spec.md](../spec.md)
 
-## Качество содержания
+## Content Quality
 
-- [x] Нет деталей реализации (языки, фреймворки, API)
-- [x] Сфокусировано на ценности для пользователя и бизнес-потребностях
-- [x] Написано для нетехнических стейкхолдеров
-- [x] Все обязательные разделы заполнены
+- [x] No implementation details (languages, frameworks, APIs)
+- [x] Focused on user value and business needs
+- [x] Written for non-technical stakeholders
+- [x] All required sections are complete
 
-## Полнота требований
+## Requirements Completeness
 
-- [x] Нет маркеров [NEEDS CLARIFICATION]
-- [x] Требования тестируемы и однозначны
-- [x] Критерии успеха измеримы
-- [x] Критерии успеха не содержат деталей реализации
-- [x] Все сценарии принятия определены
-- [x] Граничные случаи выявлены
-- [x] Область охвата чётко ограничена
-- [x] Зависимости и допущения определены
+- [x] No [NEEDS CLARIFICATION] markers
+- [x] Requirements are testable and unambiguous
+- [x] Success criteria are measurable
+- [x] Success criteria contain no implementation details
+- [x] All acceptance scenarios are defined
+- [x] Edge cases are identified
+- [x] Scope is clearly bounded
+- [x] Dependencies and assumptions are defined
 
-## Готовность функциональности
+## Feature Readiness
 
-- [x] Все функциональные требования имеют чёткие критерии принятия
-- [x] Пользовательские сценарии покрывают основные потоки
-- [x] Функциональность соответствует измеримым результатам в критериях успеха
-- [x] Детали реализации не проникают в спецификацию
+- [x] All functional requirements have clear acceptance criteria
+- [x] User stories cover the main flows
+- [x] Feature maps to measurable outcomes in the success criteria
+- [x] Implementation details do not leak into the specification
 
-## Итог валидации
+## Validation Result
 
-Все пункты прошли проверку. Спецификация готова к следующему шагу.
+All items passed. The specification is ready for the next step.
 
-**Статус**: ✅ Готово к `/speckit-plan`
+**Status**: ✅ Ready for `/speckit-plan`

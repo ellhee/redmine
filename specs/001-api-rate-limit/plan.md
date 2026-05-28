@@ -8,7 +8,7 @@
 
 ## Summary
 
-Реализовать защиту REST API Redmine от перебора токенов и массового извлечения данных с помощью IP-based rate limiting на основе скользящего окна. Ограничение управляется администратором через страницу настроек API и по умолчанию выключено. Логика хранилища счётчиков вынесена в `lib/redmine/rate_limit.rb`, интеграция — через `prepend_before_action` в `ApplicationController`.
+Implement IP-based rate limiting for the Redmine REST API using a sliding window algorithm to protect against token brute-force and bulk data extraction. The limit is managed by an administrator through the API settings page and is disabled by default. The counter store logic is extracted to `lib/redmine/rate_limit.rb`; integration is via `prepend_before_action` in `ApplicationController`.
 
 ---
 
@@ -16,89 +16,89 @@
 
 **Language/Version**: Ruby >= 3.2.0, < 3.5.0
 
-**Primary Dependencies**: Rails 7.2 (ActionController, ActiveSupport); Minitest + Mocha (тесты)
+**Primary Dependencies**: Rails 7.2 (ActionController, ActiveSupport); Minitest + Mocha (tests)
 
-**Storage**: In-memory (Hash + Mutex в классовой переменной); настройки в таблице `settings` (существующая)
+**Storage**: In-memory (Hash + Mutex in a class-level variable); settings in the `settings` table (existing)
 
-**Testing**: Minitest; запуск через `docker compose exec test bundle exec rake test TEST=<path>`
+**Testing**: Minitest; run via `docker compose exec test bundle exec rake test TEST=<path>`
 
-**Target Platform**: Rack/Puma (многопоточный), Linux server
+**Target Platform**: Rack/Puma (multi-threaded), Linux server
 
 **Project Type**: Web-service (Rails MVC)
 
-**Performance Goals**: Накладные расходы на проверку O(1), < 1 мс на запрос; нулевые при выключенном rate limiting
+**Performance Goals**: O(1) check overhead, < 1 ms per request; zero overhead when rate limiting is disabled
 
-**Constraints**: Нет новых gem-зависимостей; нет миграций БД; thread-safe через Mutex
+**Constraints**: No new gem dependencies; no database migrations; thread-safe via Mutex
 
-**Scale/Scope**: До 10 000 уникальных IP в памяти (дефолт); ~24 байта на IP-запись (константа)
+**Scale/Scope**: Up to 10,000 unique IPs in memory (default); ~24 bytes per IP record (constant)
 
 ---
 
 ## Constitution Check
 
-*GATE: Проверка перед Phase 0. Повторная проверка после Phase 1.*
+*GATE: Verified before Phase 0. Re-verified after Phase 1.*
 
-- [x] **I. Rails Conventions First** — логика в `lib/redmine/` (не в контроллере); `ApplicationController` содержит только тонкий `before_action`; все файлы с `frozen_string_literal`; GPL-заголовок.
-- [x] **II. Multi-Level Test Coverage** — unit-тесты для `Redmine::RateLimit::Store` (`test/unit/lib/redmine/rate_limit_test.rb`); functional-тесты настроек (`test/functional/settings_controller_test.rb`); integration-тесты API (`test/integration/api_test/rate_limiting_test.rb`).
-- [x] **III. Fixtures as Test Data Authority** — существующие fixtures достаточны; rate limit store сбрасывается в `setup` тестов.
-- [x] **IV. Plugin-Based Extensibility** — вся логика в `lib/redmine/rate_limit.rb`; контроллер вызывает модуль через интерфейс. Плагины могут переопределить поведение через хук.
-- [x] **V. REST API Parity** — rate limiting применяется только к API-запросам; настройки управляются через UI (CRUD через `/admin/settings`); UI-форма тестируется в functional-тестах.
-- [x] **VI. Internationalization** — все строки через I18n (`error_rate_limit_exceeded`, `setting_api_rate_limiting_enabled` и др.); нет hardcoded текста в ERB.
+- [x] **I. Rails Conventions First** — logic in `lib/redmine/` (not in the controller); `ApplicationController` contains only a thin `before_action`; all files with `frozen_string_literal`; GPL header.
+- [x] **II. Multi-Level Test Coverage** — unit tests for `Redmine::RateLimit::Store` (`test/unit/lib/redmine/rate_limit_test.rb`); functional tests for settings (`test/functional/settings_controller_test.rb`); integration tests for the API (`test/integration/api_test/rate_limiting_test.rb`).
+- [x] **III. Fixtures as Test Data Authority** — existing fixtures are sufficient; the rate limit store is reset in test `setup`.
+- [x] **IV. Plugin-Based Extensibility** — all logic in `lib/redmine/rate_limit.rb`; the controller calls the module through its interface. Plugins can override behaviour via hooks.
+- [x] **V. REST API Parity** — rate limiting applies only to API requests; settings are managed via UI (CRUD via `/admin/settings`); the UI form is tested in functional tests.
+- [x] **VI. Internationalization** — all strings via I18n (`error_rate_limit_exceeded`, `setting_api_rate_limiting_enabled`, etc.); no hardcoded text in ERB.
 
 ---
 
 ## Project Structure
 
-### Документация (эта фича)
+### Documentation (this feature)
 
 ```text
 specs/001-api-rate-limit/
-├── plan.md              # Этот файл
+├── plan.md              # This file
 ├── research.md          # Phase 0
 ├── data-model.md        # Phase 1
 ├── quickstart.md        # Phase 1
 ├── contracts/
 │   └── http-headers.md  # Phase 1
-└── tasks.md             # Phase 2 (создаётся /speckit-tasks)
+└── tasks.md             # Phase 2 (generated by /speckit-tasks)
 ```
 
-### Исходный код
+### Source Code
 
 ```text
 lib/redmine/
-└── rate_limit.rb                    # Модуль: Store, алгоритм, интерфейс
+└── rate_limit.rb                    # Module: Store, algorithm, interface
 
 app/controllers/
 └── application_controller.rb        # +prepend_before_action :check_api_rate_limit
-                                     # +def check_api_rate_limit (приватный)
+                                     # +def check_api_rate_limit (private)
 
 app/views/settings/
-└── _api.html.erb                    # +4 поля настроек rate limiting
+└── _api.html.erb                    # +4 rate limiting settings fields
 
 config/
-├── settings.yml                     # +4 ключа настроек
+├── settings.yml                     # +4 settings keys
 └── locales/
-    └── en.yml                       # +I18n ключи (setting_*, error_*)
+    └── en.yml                       # +I18n keys (setting_*, error_*)
 
 test/unit/lib/redmine/
-└── rate_limit_test.rb               # Unit-тесты Store и алгоритма
+└── rate_limit_test.rb               # Unit tests for Store and algorithm
 
 test/functional/
-└── settings_controller_test.rb      # +тесты сохранения rate limit настроек
+└── settings_controller_test.rb      # +tests for saving rate limit settings
 
 test/integration/api_test/
-└── rate_limiting_test.rb            # Integration API-тесты (JSON + XML)
+└── rate_limiting_test.rb            # Integration API tests (JSON + XML)
 ```
 
-**Structure Decision**: Single Rails app, стандартная Rails структура. Rate limit логика в `lib/redmine/` согласно Принципу IV.
+**Structure Decision**: Single Rails app, standard Rails structure. Rate limit logic in `lib/redmine/` per Principle IV.
 
 ---
 
-## Детали реализации
+## Implementation Details
 
 ### `lib/redmine/rate_limit.rb`
 
-Публичный интерфейс модуля `Redmine::RateLimit`:
+Public interface of the `Redmine::RateLimit` module:
 
 ```ruby
 Redmine::RateLimit.check(ip)
@@ -107,19 +107,17 @@ Redmine::RateLimit.check(ip)
 # => { status: :disabled }
 # => { status: :untracked, remaining: max, reset_at: now }  # overflow
 
-Redmine::RateLimit.reset_store!(max_size: Integer)  # полный сброс счётчиков
+Redmine::RateLimit.reset_store!(max_size: Integer)  # full counter reset
 Redmine::RateLimit.enabled?                         # => Boolean
-Redmine::RateLimit.store_size                       # => Integer (число отслеживаемых IP)
 ```
 
-`Redmine::RateLimit::Store` (внутренний):
-- Хранит `Hash<String, IPRecord>` где `IPRecord = Struct.new(:prev_count, :curr_count, :window_start, :logged_this_window)`
-- `check_and_record(ip, max_requests, period)` — аппроксимация скользящего окна, O(1), atomic через Mutex
-- `clear!` — полный сброс при смене настроек
-- `size` — текущее число отслеживаемых IP
-- Очистка устаревших записей при overflow: удаляются IP где `approx_count == 0`
+`Redmine::RateLimit::Store` (internal):
+- Stores `Hash<String, IPRecord>` where `IPRecord = Struct.new(:prev_count, :curr_count, :window_start, :logged_this_window)`
+- `check_and_record(ip, max_requests, period)` — sliding window approximation, O(1), atomic via Mutex
+- `size` — current number of tracked IPs
+- Eviction of stale entries on overflow: IPs where `approx_count == 0` are deleted
 
-### `ApplicationController` (изменения)
+### `ApplicationController` (changes)
 
 ```ruby
 prepend_before_action :check_api_rate_limit
@@ -129,6 +127,14 @@ private
 def check_api_rate_limit
   return unless api_request?
   result = Redmine::RateLimit.check(request.remote_ip)
+
+  case result[:log]
+  when :overflow
+    logger.warn("[RateLimit] Store at capacity, skipping tracking for #{request.remote_ip}")
+  when :blocked
+    logger.warn("[RateLimit] Blocked #{request.remote_ip} in #{Setting.api_rate_limit_period}s window at #{Time.now}")
+  end
+
   return if result[:status] == :disabled || result[:status] == :untracked
 
   response.headers['X-RateLimit-Limit']     = Setting.api_rate_limit_max_requests.to_s
@@ -138,17 +144,21 @@ def check_api_rate_limit
   if result[:status] == :denied
     retry_after = [result[:reset_at] - Time.now.to_i, 1].max
     response.headers['Retry-After'] = retry_after.to_s
-    render_error :status => 429, :message => :error_rate_limit_exceeded
+    message = l(:error_rate_limit_exceeded)
+    respond_to do |format|
+      format.json { render :json => {:errors => [message]}, :status => :too_many_requests }
+      format.xml  { render :xml  => {:error => message}.to_xml(:root => 'errors'), :status => :too_many_requests }
+    end
   end
 end
 ```
 
-### Сброс хранилища при изменении настроек
+### Store Reset on Settings Change
 
-`SettingsController#edit` (after_action или observer на изменение ключей rate limit):
-- При изменении любого из `api_rate_limit_*` ключей → `Redmine::RateLimit.reset_store!`
+`SettingsController#edit` (after successful save when any `api_rate_limit*` key is present):
+- When any `api_rate_limit_*` key changes → `Redmine::RateLimit.reset_store!(max_size: Setting.api_rate_limit_max_ips)`
 
-### Новые Settings ключи (`config/settings.yml`)
+### New Settings Keys (`config/settings.yml`)
 
 ```yaml
 api_rate_limiting_enabled:
@@ -165,7 +175,7 @@ api_rate_limit_max_ips:
   default: 10000
 ```
 
-### Новые I18n ключи (`config/locales/en.yml`)
+### New I18n Keys (`config/locales/en.yml`)
 
 ```yaml
 setting_api_rate_limiting_enabled: Enable API rate limiting
@@ -180,4 +190,4 @@ label_api_rate_limiting: API Rate Limiting
 
 ## Complexity Tracking
 
-> Нет нарушений Constitution Check — раздел не заполняется.
+> No Constitution Check violations — section left blank.

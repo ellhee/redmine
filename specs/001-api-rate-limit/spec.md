@@ -1,189 +1,189 @@
-# Спецификация функциональности: Ограничение частоты запросов к API (Rate Limiting)
+# Feature Specification: API Rate Limiting
 
 **Feature Branch**: `feature/api-rate-limiting`
 
-**Создано**: 2026-05-28
+**Created**: 2026-05-28
 
-**Статус**: Draft
+**Status**: Draft
 
-**Назначение**: Защита REST API от двух классов угроз безопасности:
-- **Перебор токенов** — автоматизированный подбор API-токенов путём массовой отправки запросов с разными учётными данными.
-- **Массовое извлечение данных (bulk data extraction)** — систематическая выгрузка всего содержимого через API без авторизации на такой объём доступа.
-
----
-
-## Пользовательские сценарии и тестирование *(обязательно)*
-
-### Пользовательский сценарий 1 — Блокировка перебора API-токенов (Приоритет: P1)
-
-Злоумышленник пытается подобрать действующий API-токен Redmine, отправляя с одного IP большое количество запросов с разными значениями токена. Система обнаруживает превышение порога и блокирует дальнейшие запросы с этого IP на время, делая перебор нецелесообразным.
-
-**Почему такой приоритет**: Перебор токенов — прямая угроза компрометации аккаунтов. Это основная мотивация фичи.
-
-**Независимое тестирование**: Настроить лимит, отправить с одного IP серию запросов с произвольными токенами, превысив лимит — сервер должен вернуть `429 Too Many Requests` и продолжать отклонять запросы до сброса счётчика.
-
-**Сценарии принятия**:
-
-1. **Дано** злоумышленник отправляет запросы с неверными токенами с одного IP, **Когда** число запросов не превышает лимит окна, **Тогда** каждый запрос получает ответ 401 (неверные учётные данные), не 429.
-2. **Дано** злоумышленник превысил лимит запросов в текущем временном окне, **Когда** он отправляет следующий запрос (независимо от токена — верного или нет), **Тогда** сервер возвращает HTTP 429 с заголовком `Retry-After`.
-3. **Дано** IP заблокирован по лимиту, **Когда** тот же IP отправляет запрос с корректным токеном, **Тогда** запрос всё равно получает 429 — блокировка не снимается при наличии верного токена.
-4. **Дано** истекло временное окно ограничения, **Когда** IP отправляет следующий запрос, **Тогда** счётчик сбрасывается и запрос обрабатывается нормально.
+**Purpose**: Protect the REST API against two classes of security threats:
+- **Token brute-force** — automated guessing of API tokens by sending large volumes of requests with different credentials from a single IP.
+- **Bulk data extraction** — systematic scraping of all content through the API without authorisation for that volume of access.
 
 ---
 
-### Пользовательский сценарий 2 — Управление настройками через административный интерфейс (Приоритет: P1)
+## User Stories and Acceptance Testing *(required)*
 
-Администратор Redmine настраивает параметры rate limiting (включение/выключение, лимит запросов, временное окно) через стандартную страницу настроек в административном разделе — по аналогии с другими системными параметрами.
+### User Story 1 — Block API Token Brute-Force (Priority: P1)
 
-**Почему такой приоритет**: Без возможности управления настройками функциональность неприменима в production. Rate limiting по умолчанию выключен, поэтому управление конфигурацией критично.
+An attacker attempts to discover a valid Redmine API token by sending a large number of requests with different token values from a single IP. The system detects that the threshold has been exceeded and blocks further requests from that IP for a period of time, making brute-force impractical.
 
-**Независимое тестирование**: Можно зайти в `/admin/settings`, включить rate limiting, задать параметры, сохранить — и убедиться, что настройки сохранились и применились.
+**Why this priority**: Token brute-force is a direct threat of account compromise. This is the primary motivation for the feature.
 
-**Сценарии принятия**:
+**Independent testing**: Configure a limit, send a series of requests from a single IP with arbitrary tokens exceeding the limit — the server must return `429 Too Many Requests` and continue rejecting requests until the counter resets.
 
-1. **Дано** администратор открывает страницу настроек API, **Когда** rate limiting выключен (состояние по умолчанию), **Тогда** настройка отображается как отключённая и API работает без ограничений.
-2. **Дано** администратор включает rate limiting и задаёт лимит (например, 100 запросов в 1 минуту), **Когда** он сохраняет настройки, **Тогда** новые параметры вступают в силу немедленно без перезапуска сервера.
-3. **Дано** администратор вводит некорректные значения параметров (например, отрицательный лимит), **Когда** он пытается сохранить, **Тогда** система отображает понятное сообщение об ошибке и не сохраняет невалидные данные.
-4. **Дано** администратор выключает rate limiting, **Когда** настройки сохранены, **Тогда** API перестаёт проверять лимиты и обрабатывает все запросы без ограничений.
+**Acceptance scenarios**:
 
----
-
-### Пользовательский сценарий 3 — Информирование клиента о лимитах (Приоритет: P2)
-
-API-клиент (разработчик или автоматизированная система) получает информацию о текущих лимитах и оставшихся разрешённых запросах через стандартные HTTP-заголовки, чтобы корректно управлять частотой своих обращений.
-
-**Почему такой приоритет**: Улучшает developer experience и позволяет клиентам реализовать backoff-логику, но не блокирует базовую защиту.
-
-**Независимое тестирование**: Можно отправить запрос к API и проверить наличие и корректность заголовков rate limit в ответе.
-
-**Сценарии принятия**:
-
-1. **Дано** rate limiting включён, **Когда** клиент делает любой API-запрос, **Тогда** ответ содержит заголовки с информацией о лимите, оставшихся запросах и времени сброса.
-2. **Дано** клиент превысил лимит, **Когда** он получает ответ 429, **Тогда** ответ содержит заголовок `Retry-After` с количеством секунд до сброса счётчика.
-3. **Дано** rate limiting выключен, **Когда** клиент делает API-запрос, **Тогда** заголовки rate limit отсутствуют в ответе.
+1. **Given** an attacker sends requests with invalid tokens from a single IP, **When** the number of requests does not exceed the window limit, **Then** each request receives a 401 response (invalid credentials), not 429.
+2. **Given** an attacker has exceeded the request limit in the current time window, **When** they send the next request (regardless of token — valid or not), **Then** the server returns HTTP 429 with a `Retry-After` header.
+3. **Given** an IP is blocked by the rate limit, **When** the same IP sends a request with a valid token, **Then** the request still receives 429 — the block is not lifted by a correct token.
+4. **Given** the rate limit time window has expired, **When** the IP sends the next request, **Then** the counter resets and the request is processed normally.
 
 ---
 
-### Пользовательский сценарий 4 — Нормальная работа легитимного API-клиента (Приоритет: P1)
+### User Story 2 — Manage Settings via Admin Interface (Priority: P1)
 
-Легитимный API-клиент (скрипт интеграции, CI/CD-пайплайн, внешняя система) работает в штатном режиме: все его запросы укладываются в установленный лимит, и rate limiting никак не влияет на его работу.
+A Redmine administrator configures rate limiting parameters (enable/disable, request limit, time window) through the standard settings page in the admin section — in the same way as other system parameters.
 
-**Почему такой приоритет**: Это обязательный «золотой путь» — функция защиты не должна мешать нормальным пользователям.
+**Why this priority**: Without the ability to manage settings, the feature cannot be used in production. Rate limiting is disabled by default, so configuration management is critical.
 
-**Независимое тестирование**: Включить rate limiting, отправить N запросов (не превышая лимит) с одного IP — все запросы должны получить нормальные ответы без каких-либо ограничений.
+**Independent testing**: Navigate to `/admin/settings`, enable rate limiting, set parameters, save — and verify that the settings were saved and applied.
 
-**Сценарии принятия**:
+**Acceptance scenarios**:
 
-1. **Дано** rate limiting включён с лимитом 100 запросов в минуту, **Когда** клиент отправляет 50 запросов с одного IP в течение минуты, **Тогда** все 50 запросов обрабатываются и получают штатные ответы (200, 201, 404 и т.д.), без 429.
-2. **Дано** клиент работает ниже порога лимита, **Когда** он запрашивает любой API-ресурс, **Тогда** ответ содержит корректные заголовки `X-RateLimit-Remaining` с убывающим остатком и `X-RateLimit-Limit` с полным лимитом.
-3. **Дано** клиент полностью использовал лимит текущего окна и дождался его сброса, **Когда** начинается новое окно и клиент отправляет запрос, **Тогда** запрос обрабатывается нормально, а `X-RateLimit-Remaining` снова показывает полный лимит минус один.
-4. **Дано** два разных легитимных клиента работают одновременно с разных IP, **Когда** каждый из них отправляет запросы в пределах своего лимита, **Тогда** счётчики этих IP не влияют друг на друга и оба клиента получают нормальные ответы.
-
----
-
-### Пользовательский сценарий 5 — Работа без включения rate limiting (Приоритет: P1)
-
-Администратор не включил rate limiting (состояние по умолчанию). Система работает в полностью прозрачном режиме: никакие запросы не отклоняются из-за частоты обращений, никакой overhead не добавляется к обработке запросов.
-
-**Почему такой приоритет**: Rate limiting выключен по умолчанию. Система должна корректно работать в этом состоянии, не создавая ложных блокировок и не влияя на производительность.
-
-**Независимое тестирование**: Убедиться, что rate limiting выключен (настройка по умолчанию), отправить любое количество запросов с одного IP — ни один не должен получить 429, заголовки rate limit отсутствуют.
-
-**Сценарии принятия**:
-
-1. **Дано** rate limiting выключен (состояние по умолчанию после установки), **Когда** клиент отправляет любое количество API-запросов к существующему ресурсу с корректными учётными данными, **Тогда** каждый запрос возвращает HTTP 200 (или иной штатный код: 201, 204) — ни один не получает 429.
-2. **Дано** rate limiting выключен, **Когда** клиент отправляет запрос и получает HTTP 200, **Тогда** ответ не содержит заголовков `X-RateLimit-*` и `Retry-After`.
-3. **Дано** rate limiting выключен, **Когда** клиент без перерыва отправляет запросы в объёме, многократно превышающем любой разумный лимит, **Тогда** все запросы к существующим ресурсам возвращают HTTP 200 — система не вводит ограничений.
-4. **Дано** rate limiting был включён и ранее заблокировал IP, **Когда** администратор выключает rate limiting и клиент повторяет запрос, **Тогда** запрос возвращает HTTP 200 (блокировка снята, счётчики не учитываются).
+1. **Given** an administrator opens the API settings page, **When** rate limiting is disabled (default state), **Then** the setting is displayed as disabled and the API works without restrictions.
+2. **Given** an administrator enables rate limiting and sets a limit (e.g., 100 requests per minute), **When** they save the settings, **Then** the new parameters take effect immediately without a server restart.
+3. **Given** an administrator enters invalid parameter values (e.g., a negative limit), **When** they attempt to save, **Then** the system displays a clear error message and does not save the invalid data.
+4. **Given** an administrator disables rate limiting, **When** the settings are saved, **Then** the API stops checking limits and processes all requests without restriction.
 
 ---
 
-### Пользовательский сценарий 6 — Потокобезопасность при параллельных запросах (Приоритет: P2)
+### User Story 3 — Inform the Client About Limits (Priority: P2)
 
-Несколько параллельных запросов с одного IP поступают одновременно в момент, когда счётчик находится у границы лимита. Система корректно инкрементирует счётчик без гонок данных: никакой IP не получает больше разрешённых запросов за счёт параллельной обработки, и ни один корректный запрос не теряется при подсчёте.
+An API client (a developer or an automated system) receives information about the current limits and remaining allowed requests via standard HTTP headers, so it can correctly manage its request frequency.
 
-**Почему такой приоритет**: Без атомарного счётчика атакующий может обойти защиту, отправив пачку параллельных запросов в момент сброса окна. В то же время это не блокирует базовую реализацию.
+**Why this priority**: Improves developer experience and allows clients to implement backoff logic, but does not block the basic protection.
 
-**Независимое тестирование**: Отправить с одного IP пачку конкурентных запросов (например, 20 одновременных при лимите 15) — суммарное число обработанных запросов не должно превышать лимит.
+**Independent testing**: Send a request to the API and verify the presence and correctness of rate limit headers in the response.
 
-**Сценарии принятия**:
+**Acceptance scenarios**:
 
-1. **Дано** rate limiting включён с лимитом N, **Когда** с одного IP одновременно поступают N+K запросов (K > 0), **Тогда** ровно N запросов получают нормальный ответ, а K запросов получают 429 — суммарно не более N успешных.
-2. **Дано** счётчик IP находится у нуля, **Когда** одновременно поступают несколько первых запросов, **Тогда** каждый из них учитывается в счётчике — итоговое значение равно числу одновременных запросов, потерь не происходит.
-3. **Дано** несколько потоков одновременно обновляют счётчики разных IP, **Когда** запросы обрабатываются параллельно, **Тогда** счётчики разных IP не влияют друг на друга и не портят чужие значения.
-
----
-
-### Граничные случаи
-
-- Что происходит при одновременных запросах с одного IP (race condition при инкременте счётчика)?
-- Как система ведёт себя при большом числе уникальных IP-адресов (потребление памяти)?
-- Корректно ли применяется лимит к IPv6-адресам?
-- Что происходит с запросами за reverse proxy, когда реальный IP приходит через заголовок `X-Forwarded-For`?
-- Применяется ли ограничение к запросам от самого сервера (локальный адрес)?
-- Как лимит применяется, если у нескольких пользователей один выходной IP (NAT, корпоративная сеть)? Все они разделяют один счётчик.
-- Применяется ли лимит к запросам, которые уже провалили аутентификацию (401)? **Да** — именно такие запросы характерны для перебора токенов.
+1. **Given** rate limiting is enabled, **When** a client makes any API request, **Then** the response contains headers with information about the limit, remaining requests, and reset time.
+2. **Given** a client has exceeded the limit, **When** they receive a 429 response, **Then** the response contains a `Retry-After` header with the number of seconds until the counter resets.
+3. **Given** rate limiting is disabled, **When** a client makes an API request, **Then** rate limit headers are absent from the response.
 
 ---
 
-## Требования *(обязательно)*
+### User Story 4 — Normal Operation of a Legitimate API Client (Priority: P1)
 
-### Функциональные требования
+A legitimate API client (an integration script, CI/CD pipeline, or external system) works in normal mode: all its requests fit within the configured limit, and rate limiting has no effect on its operation.
 
-- **FR-001**: Система ДОЛЖНА поддерживать включение/выключение rate limiting для API через административный интерфейс; по умолчанию rate limiting выключен.
-- **FR-002**: Система ДОЛЖНА ограничивать количество API-запросов с одного IP-адреса в заданное временное окно — **вне зависимости от результата аутентификации** (лимит считается до проверки токена, чтобы перебор блокировался).
-- **FR-003**: Система ДОЛЖНА возвращать HTTP 429 (Too Many Requests) при превышении лимита с заголовком `Retry-After`.
-- **FR-004**: Система ДОЛЖНА включать в ответы API заголовки с информацией о лимитах (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) при включённом rate limiting.
-- **FR-005**: Администратор ДОЛЖЕН иметь возможность настраивать максимальное количество запросов и длину временного окна (в секундах) через страницу настроек.
-- **FR-006**: Настройки rate limiting ДОЛЖНЫ применяться без перезапуска сервера. При сохранении любых изменений настроек (лимит, окно, включение/выключение) хранилище счётчиков ДОЛЖНО полностью очищаться — все IP начинают с нуля в момент вступления новых настроек в силу.
-- **FR-007**: Система ДОЛЖНА корректно определять IP-адрес клиента с учётом обратных прокси (заголовок `X-Forwarded-For`).
-- **FR-008**: Rate limiting ДОЛЖЕН применяться только к API-запросам (эндпоинты с форматом `.json`, `.xml` или заголовком `Accept: application/json/xml`), но не к веб-интерфейсу.
-- **FR-009**: Реализация ДОЛЖНА использовать **скользящее временное окно** (sliding window): в любой момент времени система проверяет количество запросов за последние N секунд от текущего момента, без сброса счётчика в фиксированные интервалы. Это исключает эффект «двойного всплеска» на стыке периодов.
-- **FR-010**: Система ДОЛЖНА валидировать вводимые параметры (лимит > 0, окно > 0) и отображать понятные сообщения об ошибках.
-- **FR-011**: Ответ 429 НЕ ДОЛЖЕН раскрывать информацию о том, существует ли аккаунт или правилен ли токен — тело ответа должно быть нейтральным (не должно различаться для «неверный токен» и «верный токен, но превышен лимит»).
-- **FR-012**: При первом превышении лимита для IP в текущем скользящем окне система ДОЛЖНА записать событие в лог приложения: IP-адрес, момент блокировки, текущее число запросов в окне. Повторные отклонения того же IP в том же окне НЕ ДОЛЖНЫ дублироваться в логе.
-- **FR-013**: Хранилище счётчиков ДОЛЖНО иметь настраиваемый верхний предел числа отслеживаемых IP-адресов с разумным дефолтным значением. При достижении предела система ДОЛЖНА сначала выполнить очистку записей, у которых все метки времени вышли за пределы скользящего окна (устаревшие записи). Если после очистки место освободилось — новая запись добавляется. Если хранилище по-прежнему заполнено (все записи активны) — запрос нового IP ДОЛЖЕН быть обработан без ограничений (fail open), а в лог ДОЛЖНО быть записано предупреждение о заполнении хранилища с текущим числом записей. Дефолтное максимальное число записей ДОЛЖНО быть задокументировано в настройках.
+**Why this priority**: This is the mandatory "golden path" — the protection feature must not interfere with normal users.
 
-### Ключевые сущности
+**Independent testing**: Enable rate limiting, send N requests (within the limit) from a single IP — all requests should receive normal responses with no restrictions.
 
-- **RateLimitSetting**: Конфигурация ограничения — включено/выключено (`enabled`), максимальное число запросов (`max_requests`), длина временного окна в секундах (`period`). Хранится в общем хранилище настроек Redmine.
-- **RateLimitCounter**: Счётчик запросов для IP-адреса — реализуется как аппроксимация скользящего окна через два счётчика. Хранит структуру `{prev_count, curr_count, window_start, logged_this_window}`: `prev_count` — число запросов в предыдущем завершённом окне, `curr_count` — число запросов в текущем окне, `window_start` — Unix-метка начала текущего окна, `logged_this_window` — флаг дедупликации лога блокировок. Аппроксимация: `approx = prev_count × (1 − elapsed/period) + curr_count`. Хранится в оперативной памяти (in-memory), константный размер записи (~24 байта). Общее число записей ограничено настраиваемым параметром; при достижении лимита выполняется очистка полностью устаревших записей (у которых `approx ≈ 0`) перед добавлением новой.
+**Acceptance scenarios**:
+
+1. **Given** rate limiting is enabled with a limit of 100 requests per minute, **When** a client sends 50 requests from a single IP within a minute, **Then** all 50 requests are processed and receive normal responses (200, 201, 404, etc.), without 429.
+2. **Given** a client is operating below the rate limit threshold, **When** it requests any API resource, **Then** the response contains correct `X-RateLimit-Remaining` headers with a decreasing count and `X-RateLimit-Limit` with the full limit.
+3. **Given** a client has fully used the current window's limit and waited for it to reset, **When** a new window begins and the client sends a request, **Then** the request is processed normally and `X-RateLimit-Remaining` again shows the full limit minus one.
+4. **Given** two different legitimate clients are working simultaneously from different IPs, **When** each sends requests within its own limit, **Then** the counters of these IPs do not affect each other and both clients receive normal responses.
 
 ---
 
-## Критерии успеха *(обязательно)*
+### User Story 5 — Operation Without Rate Limiting Enabled (Priority: P1)
 
-### Измеримые результаты
+An administrator has not enabled rate limiting (the default state). The system operates in a fully transparent mode: no requests are rejected due to request frequency, and no overhead is added to request processing.
 
-- **SC-001**: Автоматизированная атака перебора токенов (более N запросов за окно с одного IP) полностью блокируется: ни один запрос сверх лимита не достигает логики проверки учётных данных.
-- **SC-002**: Скрипт массовой выгрузки данных через API получает 429 после превышения лимита и не может продолжить извлечение до истечения окна.
-- **SC-003**: Клиент, превысивший лимит, получает ответ 429 не позднее следующего запроса после превышения, с корректным `Retry-After`.
-- **SC-004**: После истечения временного окна клиент снова может выполнять запросы в полном объёме лимита.
-- **SC-005**: Администратор может полностью настроить rate limiting (включить, задать параметры, сохранить) менее чем за 2 минуты через стандартный интерфейс настроек.
-- **SC-006**: Изменение настроек вступает в силу для новых запросов в течение не более 5 секунд без перезапуска приложения.
-- **SC-007**: При выключенном rate limiting производительность API не деградирует (накладные расходы на проверку отсутствуют или пренебрежимо малы).
+**Why this priority**: Rate limiting is disabled by default. The system must work correctly in this state, without creating false blocks or affecting performance.
 
----
+**Independent testing**: Verify that rate limiting is disabled (default setting), send any number of requests from a single IP — none should receive 429, and rate limit headers should be absent.
 
-## Уточнения
+**Acceptance scenarios**:
 
-### Сессия 2026-05-28
-
-- Q: Тип временного окна: фиксированное или скользящее? → A: Скользящее окно (sliding window) — система всегда смотрит на N секунд назад от текущего момента.
-- Q: Логирование событий блокировки — какой уровень детализации? → A: Логировать первое срабатывание на IP за окно (IP, время, число запросов); повторные 429 в том же окне не дублировать.
-- Q: Поведение хранилища счётчиков при достижении максимального числа записей? → A: Очистка устаревших записей (все метки вышли за пределы окна) при достижении лимита; лимит настраивается с дефолтным значением.
-- Q: Что происходит со счётчиками при изменении настроек администратором? → A: Полный сброс хранилища счётчиков — все IP начинают с нуля в момент применения новых настроек.
-- Q: Что делать с новым IP, если после очистки устаревших записей хранилище всё ещё заполнено? → A: Fail open — пропустить запрос без отслеживания, записать предупреждение в лог.
+1. **Given** rate limiting is disabled (the default state after installation), **When** a client sends any number of API requests to an existing resource with valid credentials, **Then** each request returns HTTP 200 (or another normal code: 201, 204) — none receive 429.
+2. **Given** rate limiting is disabled, **When** a client sends a request and receives HTTP 200, **Then** the response does not contain `X-RateLimit-*` or `Retry-After` headers.
+3. **Given** rate limiting is disabled, **When** a client sends requests continuously at a volume many times exceeding any reasonable limit, **Then** all requests to existing resources return HTTP 200 — the system imposes no restrictions.
+4. **Given** rate limiting was enabled and previously blocked an IP, **When** the administrator disables rate limiting and the client retries the request, **Then** the request returns HTTP 200 (the block is lifted, counters are not checked).
 
 ---
 
-## Допущения
+### User Story 6 — Thread Safety Under Concurrent Requests (Priority: P2)
 
-- Текущая версия использует только IP-адрес как идентификатор клиента; token-based и комбинированный варианты — в будущих итерациях.
-- Счётчики запросов хранятся в памяти процесса (in-process store); персистентность между перезапусками сервера не требуется в v1.
-- Параметры rate limiting единые для всего API (не разграничены по эндпоинтам или пользователям в v1).
-- Управление настройками доступно только пользователям с правами администратора Redmine.
-- Корректное определение реального IP за reverse proxy считается ответственностью конфигурации сервера; система использует стандартный механизм Rails для получения IP (`request.remote_ip`).
-- Ограничение применяется ко всем API-запросам без исключений для конкретных эндпоинтов или IP-диапазонов в v1.
-- Пользователи за общим NAT/корпоративным прокси делят один счётчик на всех — это осознанный компромисс между безопасностью и удобством для v1. В будущих версиях токен-based вариант решит эту проблему.
-- Лимит применяется **до** проверки аутентификации — это намеренное решение для блокировки перебора токенов, где большинство запросов будут неаутентифицированными.
+Multiple concurrent requests from a single IP arrive simultaneously at the moment the counter is at the limit boundary. The system correctly increments the counter without data races: no IP receives more requests than allowed due to parallel processing, and no legitimate request is lost in the count.
+
+**Why this priority**: Without an atomic counter, an attacker can bypass the protection by sending a burst of concurrent requests at the window reset moment. At the same time, this does not block the basic implementation.
+
+**Independent testing**: Send a burst of concurrent requests from a single IP (e.g., 20 simultaneous with a limit of 15) — the total number of processed requests must not exceed the limit.
+
+**Acceptance scenarios**:
+
+1. **Given** rate limiting is enabled with a limit of N, **When** N+K requests (K > 0) arrive simultaneously from a single IP, **Then** exactly N requests receive a normal response and K requests receive 429 — no more than N successful in total.
+2. **Given** the IP counter is at zero, **When** several first requests arrive simultaneously, **Then** each is counted in the counter — the final value equals the number of concurrent requests, with no losses.
+3. **Given** multiple threads are simultaneously updating counters for different IPs, **When** requests are processed in parallel, **Then** the counters of different IPs do not affect each other and do not corrupt each other's values.
+
+---
+
+### Edge Cases
+
+- What happens with concurrent requests from a single IP (race condition during counter increment)?
+- How does the system behave with a large number of unique IP addresses (memory consumption)?
+- Is the limit correctly applied to IPv6 addresses?
+- What happens with requests behind a reverse proxy, where the real IP comes through the `X-Forwarded-For` header?
+- Does the limit apply to requests from the server itself (loopback address)?
+- How is the limit applied when multiple users share a single outgoing IP (NAT, corporate network)? They all share one counter.
+- Does the limit apply to requests that have already failed authentication (401)? **Yes** — precisely these requests are characteristic of token brute-force.
+
+---
+
+## Requirements *(required)*
+
+### Functional Requirements
+
+- **FR-001**: The system MUST support enabling/disabling rate limiting for the API via the admin interface; rate limiting is disabled by default.
+- **FR-002**: The system MUST limit the number of API requests from a single IP address within a given time window — **regardless of the authentication result** (the limit is counted before token verification, so brute-force is blocked).
+- **FR-003**: The system MUST return HTTP 429 (Too Many Requests) when the limit is exceeded, with a `Retry-After` header.
+- **FR-004**: The system MUST include headers with rate limit information (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) in API responses when rate limiting is enabled.
+- **FR-005**: An administrator MUST be able to configure the maximum number of requests and the time window length (in seconds) via the settings page.
+- **FR-006**: Rate limiting settings MUST take effect without a server restart. When any setting changes are saved (limit, window, enable/disable), the counter store MUST be fully cleared — all IPs start from zero when the new settings take effect.
+- **FR-007**: The system MUST correctly identify the client's IP address accounting for reverse proxies (the `X-Forwarded-For` header).
+- **FR-008**: Rate limiting MUST apply only to API requests (endpoints with format `.json`, `.xml`, or `Accept: application/json/xml` header), but not to the web interface.
+- **FR-009**: The implementation MUST use a **sliding window**: at any point in time the system checks the number of requests in the last N seconds from the current moment, without resetting the counter at fixed intervals. This eliminates the "double burst" effect at period boundaries.
+- **FR-010**: The system MUST validate input parameters (limit > 0, window > 0) and display clear error messages.
+- **FR-011**: The 429 response MUST NOT reveal information about whether an account exists or whether a token is valid — the response body must be neutral (must not differ between "invalid token" and "valid token but limit exceeded").
+- **FR-012**: When a limit is first exceeded for an IP in the current sliding window, the system MUST write an event to the application log: the IP address, the time of the block, and the current number of requests in the window. Subsequent rejections of the same IP in the same window MUST NOT be duplicated in the log.
+- **FR-013**: The counter store MUST have a configurable upper limit on the number of tracked IP addresses with a sensible default. When the limit is reached, the system MUST first evict entries whose timestamps have fully expired beyond the sliding window (stale entries). If space is freed after eviction, the new entry is added. If the store is still full (all entries are active), the new IP's request MUST be processed without restriction (fail open), and a warning MUST be logged with the current number of entries. The default maximum number of entries MUST be documented in the settings.
+
+### Key Entities
+
+- **RateLimitSetting**: Rate limit configuration — enabled/disabled (`enabled`), maximum number of requests (`max_requests`), time window length in seconds (`period`). Stored in Redmine's common settings store.
+- **RateLimitCounter**: Request counter for an IP address — implemented as a sliding window approximation via two counters. Stores the structure `{prev_count, curr_count, window_start, logged_this_window}`: `prev_count` — number of requests in the previous completed window, `curr_count` — number of requests in the current window, `window_start` — Unix timestamp of the start of the current window, `logged_this_window` — deduplication flag for block log events. Stored in memory (in-memory), constant record size (~24 bytes). The total number of records is limited by a configurable parameter; when the limit is reached, fully stale records (where `approx ≈ 0`) are evicted before adding a new one.
+
+---
+
+## Success Criteria *(required)*
+
+### Measurable Outcomes
+
+- **SC-001**: An automated token brute-force attack (more than N requests per window from a single IP) is fully blocked: no request beyond the limit reaches the credential verification logic.
+- **SC-002**: A bulk data extraction script via the API receives 429 after exceeding the limit and cannot continue extraction until the window expires.
+- **SC-003**: A client that has exceeded the limit receives a 429 response no later than the next request after exceeding, with a correct `Retry-After`.
+- **SC-004**: After the time window expires, the client can again make requests up to the full limit.
+- **SC-005**: An administrator can fully configure rate limiting (enable, set parameters, save) in less than 2 minutes via the standard settings interface.
+- **SC-006**: Settings changes take effect for new requests within no more than 5 seconds without restarting the application.
+- **SC-007**: When rate limiting is disabled, API performance does not degrade (no overhead from checks, or negligibly small).
+
+---
+
+## Clarifications
+
+### Session 2026-05-28
+
+- Q: Time window type: fixed or sliding? → A: Sliding window — the system always looks at the last N seconds from the current moment.
+- Q: Block event logging — what level of detail? → A: Log the first trigger per IP per window (IP, time, request count); subsequent 429s in the same window are not duplicated.
+- Q: Behaviour of the counter store when the maximum number of entries is reached? → A: Evict stale entries (all timestamps have gone beyond the window boundary) when the limit is hit; the limit is configurable with a default value.
+- Q: What happens to counters when an administrator changes settings? → A: Full store reset — all IPs start from zero when the new settings take effect.
+- Q: What to do with a new IP if the store is still full after evicting stale entries? → A: Fail open — let the request through without tracking, log a warning.
+
+---
+
+## Assumptions
+
+- The current version uses only the IP address as the client identifier; token-based and combined variants are for future iterations.
+- Request counters are stored in process memory (in-process store); persistence across server restarts is not required in v1.
+- Rate limiting parameters are uniform across the entire API (not differentiated by endpoint or user in v1).
+- Settings management is available only to users with Redmine administrator rights.
+- Correct identification of the real IP behind a reverse proxy is considered the responsibility of the server configuration; the system uses the standard Rails mechanism for obtaining the IP (`request.remote_ip`).
+- The limit applies to all API requests without exceptions for specific endpoints or IP ranges in v1.
+- Users behind a shared NAT/corporate proxy share a single counter — this is a deliberate trade-off between security and convenience for v1. In future versions, a token-based variant will resolve this.
+- The limit is applied **before** authentication verification — this is an intentional decision to block token brute-force, where the majority of requests will be unauthenticated.

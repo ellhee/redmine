@@ -1,23 +1,23 @@
-# Быстрый старт: Rate Limiting для API
+# Quickstart: API Rate Limiting
 
-## Включение через административный интерфейс
+## Enabling via the Admin Interface
 
-1. Войти как администратор Redmine.
-2. Открыть **Administration → Settings → API**.
-3. Включить чекбокс **Enable API rate limiting**.
-4. Задать параметры:
-   - **Max requests per period** — максимальное число запросов (дефолт: 300)
-   - **Period (seconds)** — длина скользящего окна (дефолт: 300)
-   - **Max tracked IPs** — размер хранилища счётчиков (дефолт: 10 000)
-5. Нажать **Save**.
+1. Log in as a Redmine administrator.
+2. Open **Administration → Settings → API**.
+3. Check the **Enable API rate limiting** checkbox.
+4. Set the parameters:
+   - **Max requests per period** — maximum number of requests (default: 300)
+   - **Period (seconds)** — sliding window length (default: 300)
+   - **Max tracked IPs** — counter store size (default: 10,000)
+5. Click **Save**.
 
-> ⚠️ При сохранении все существующие счётчики сбрасываются.
+> ⚠️ All existing counters are reset on save.
 
 ---
 
-## Проверка работы
+## Verifying It Works
 
-**Запрос в пределах лимита:**
+**Request within the limit:**
 ```sh
 curl -s -u admin:admin \
   -H "Accept: application/json" \
@@ -25,7 +25,7 @@ curl -s -u admin:admin \
   -I | grep -E "X-RateLimit|HTTP"
 ```
 
-Ожидаемый результат:
+Expected result:
 ```
 HTTP/2 200
 X-RateLimit-Limit: 300
@@ -33,7 +33,7 @@ X-RateLimit-Remaining: 299
 X-RateLimit-Reset: 1748390700
 ```
 
-**Симуляция превышения лимита (bash):**
+**Simulating limit exceeded (bash):**
 ```sh
 for i in $(seq 1 310); do
   curl -s -o /dev/null -w "%{http_code}\n" \
@@ -43,14 +43,14 @@ for i in $(seq 1 310); do
 done
 ```
 
-После 300 запросов ответ должен измениться на `429`.
+After 300 requests the response code changes to `429`.
 
 ---
 
-## Запуск тестов
+## Running Tests
 
 ```sh
-# Все тесты rate limiting
+# All rate limiting tests
 docker compose exec test bundle exec rake test \
   TEST=test/unit/lib/redmine/rate_limit_test.rb
 
@@ -60,20 +60,20 @@ docker compose exec test bundle exec rake test \
 
 ---
 
-## Параметры по умолчанию и рекомендации
+## Default Parameters and Recommendations
 
-| Сценарий | max_requests | period | Пояснение |
+| Scenario | max_requests | period | Notes |
 |---|---|---|---|
-| Защита от брутфорса (строгая) | 60 | 60 | 1 запрос/сек |
-| Баланс (дефолт) | 300 | 300 | 1 запрос/сек средняя |
-| Легитимные интеграции | 600 | 60 | 10 запросов/сек |
+| Brute-force protection (strict) | 60 | 60 | 1 request/second |
+| Balanced (default) | 300 | 300 | 1 request/second average |
+| Legitimate integrations | 600 | 60 | 10 requests/second |
 
 ---
 
-## Просмотр событий блокировки в логах
+## Viewing Block Events in Logs
 
 ```sh
 grep "RateLimit" log/production.log
-# [RateLimit] Blocked IP 1.2.3.4: 300 requests in 300s window at 2026-05-28 10:00:00
-# [RateLimit] Store at capacity (10000 entries), skipping tracking for 5.6.7.8
+# [RateLimit] Blocked 1.2.3.4 in 300s window at 2026-05-28 10:00:00
+# [RateLimit] Store at capacity, skipping tracking for 5.6.7.8
 ```

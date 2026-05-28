@@ -376,14 +376,14 @@ class SettingsControllerTest < Redmine::ControllerTest
   def test_save_rate_limit_settings_resets_store
     Redmine::RateLimit.reset_store!(max_size: 10_000)
     Setting.api_rate_limiting_enabled   = '1'
-    Setting.api_rate_limit_max_requests = '300'
+    Setting.api_rate_limit_max_requests = '1'
     Setting.api_rate_limit_period       = '300'
     Setting.api_rate_limit_max_ips      = '10000'
 
-    # Populate the store with some entries
+    # Exhaust the limit for an IP so it becomes blocked
     Redmine::RateLimit.check('1.2.3.4')
-    Redmine::RateLimit.check('5.6.7.8')
-    assert Redmine::RateLimit.store_size > 0, "Store should have entries before save"
+    assert_equal :denied, Redmine::RateLimit.check('1.2.3.4')[:status],
+                 "IP should be blocked before settings save"
 
     post :edit, :params => {
       :tab => 'api',
@@ -395,6 +395,9 @@ class SettingsControllerTest < Redmine::ControllerTest
       }
     }
     assert_redirected_to settings_path(:tab => 'api')
-    assert_equal 0, Redmine::RateLimit.store_size, "Store should be empty after saving rate limit settings"
+
+    # After settings save the store is reset — previously blocked IP should be allowed again
+    assert_equal :allowed, Redmine::RateLimit.check('1.2.3.4')[:status],
+                 "IP should be unblocked after settings save resets the store"
   end
 end

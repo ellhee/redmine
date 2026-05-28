@@ -109,14 +109,12 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
       Redmine::RateLimit.check('10.0.0.1')
       Redmine::RateLimit.check('10.0.0.2')
       Redmine::RateLimit.check('10.0.0.3')
-      assert_equal 3, Redmine::RateLimit.store_size
 
       # Advance time past the period so all entries become stale
       travel_to(61.seconds.from_now) do
-        # New IP should evict stale entries and be allowed
+        # New IP should evict stale entries and be allowed (not :untracked — eviction worked)
         result = Redmine::RateLimit.check('10.0.0.99')
         assert_equal :allowed, result[:status]
-        assert Redmine::RateLimit.store_size <= 3
       end
     end
   end
@@ -156,13 +154,17 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
   end
 
   def test_clear_empties_store
-    with_rate_limit_settings(enabled: '1', max_requests: '10', period: '60') do
-      Redmine::RateLimit.check('1.2.3.4')
-      Redmine::RateLimit.check('5.6.7.8')
-      assert Redmine::RateLimit.store_size > 0
+    with_rate_limit_settings(enabled: '1', max_requests: '2', period: '60') do
+      # Exhaust the limit for an IP
+      2.times { Redmine::RateLimit.check('1.2.3.4') }
+      assert_equal :denied, Redmine::RateLimit.check('1.2.3.4')[:status],
+                   "IP should be blocked before reset"
 
+      # After reset, the same IP should be allowed again — counters are cleared
       Redmine::RateLimit.reset_store!(max_size: 100)
-      assert_equal 0, Redmine::RateLimit.store_size
+      result = Redmine::RateLimit.check('1.2.3.4')
+      assert_equal :allowed, result[:status], "IP should be unblocked after store reset"
+      assert_equal 1, result[:remaining], "remaining should be max - 1 after reset"
     end
   end
 

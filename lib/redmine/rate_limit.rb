@@ -159,11 +159,6 @@ module Redmine
         Setting.api_rate_limiting_enabled?
       end
 
-      # Returns the current number of tracked IPs.
-      def store_size
-        store.size
-      end
-
       private
 
       def store

@@ -106,6 +106,10 @@ Redmine::RateLimit.check(ip)
 # => { status: :denied,    remaining: 0,   reset_at: 1748390700 }
 # => { status: :disabled }
 # => { status: :untracked, remaining: max, reset_at: now }  # overflow
+
+Redmine::RateLimit.reset_store!(max_size: Integer)  # полный сброс счётчиков
+Redmine::RateLimit.enabled?                         # => Boolean
+Redmine::RateLimit.store_size                       # => Integer (число отслеживаемых IP)
 ```
 
 `Redmine::RateLimit::Store` (внутренний):

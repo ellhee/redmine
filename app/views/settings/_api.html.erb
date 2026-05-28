@@ -6,5 +6,13 @@
 <p><%= setting_check_box :jsonp_enabled %></p>
 </div>
 
+<div class="box tabular settings">
+<p><strong><%= l(:label_api_rate_limiting) %></strong></p>
+<p><%= setting_check_box :api_rate_limiting_enabled %></p>
+<p><%= setting_text_field :api_rate_limit_max_requests, :size => 6 %></p>
+<p><%= setting_text_field :api_rate_limit_period, :size => 6 %></p>
+<p><%= setting_text_field :api_rate_limit_max_ips, :size => 8 %></p>
+</div>
+
 <%= submit_tag l(:button_save) %>
 <% end %>

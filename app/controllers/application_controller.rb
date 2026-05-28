@@ -61,6 +61,7 @@ class ApplicationController < ActionController::Base
     end
   end
 
+  prepend_before_action :check_api_rate_limit
   before_action :session_expiration, :user_setup, :check_if_login_required, :set_localization, :check_password_change, :check_twofa_activation
   after_action :record_project_usage
 
@@ -718,6 +719,40 @@ class ApplicationController < ActionController::Base
   # Returns a string that can be used as filename value in Content-Disposition header
   def filename_for_content_disposition(name)
     name
+  end
+
+  def check_api_rate_limit
+    return unless api_request?
+
+    result = Redmine::RateLimit.check(request.remote_ip)
+
+    case result[:log]
+    when :overflow
+      logger.warn(
+        "[RateLimit] Store at capacity, skipping tracking for #{request.remote_ip}"
+      )
+    when :blocked
+      logger.warn(
+        "[RateLimit] Blocked #{request.remote_ip} in " \
+        "#{Setting.api_rate_limit_period}s window at #{Time.now}"
+      )
+    end
+
+    return if result[:status] == :disabled || result[:status] == :untracked
+
+    response.headers['X-RateLimit-Limit']     = Setting.api_rate_limit_max_requests.to_s
+    response.headers['X-RateLimit-Remaining'] = result[:remaining].to_s
+    response.headers['X-RateLimit-Reset']     = result[:reset_at].to_s
+
+    if result[:status] == :denied
+      retry_after = [result[:reset_at] - Time.now.to_i, 1].max
+      response.headers['Retry-After'] = retry_after.to_s
+      message = l(:error_rate_limit_exceeded)
+      respond_to do |format|
+        format.json { render :json => {:errors => [message]}, :status => :too_many_requests }
+        format.xml  { render :xml  => {:error => message}.to_xml(:root => 'errors'), :status => :too_many_requests }
+      end
+    end
   end
 
   def api_request?

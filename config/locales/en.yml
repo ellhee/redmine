@@ -222,6 +222,7 @@ en:
   error_attachments_too_many: "This file cannot be uploaded because it exceeds the maximum number of files that can be attached simultaneously (%{max_number_of_files})"
   error_attachment_too_big: "This file cannot be uploaded because it exceeds the maximum allowed file size (%{max_size})"
   error_bulk_download_size_too_big: "These attachments cannot be bulk downloaded because the total file size exceeds the maximum allowed size (%{max_size})"
+  error_rate_limit_exceeded: "Rate limit exceeded. Please try again later."
   error_session_expired: "Your session has expired. Please login again."
   error_token_expired: "This password recovery link has expired, please try again."
   warning_attachments_not_saved: "%{count} file(s) could not be saved."
@@ -506,6 +507,10 @@ en:
   setting_thumbnails_size: Thumbnails size (in pixels)
   setting_non_working_week_days: Non-working days
   setting_jsonp_enabled: Enable JSONP support
+  setting_api_rate_limiting_enabled: Enable API rate limiting
+  setting_api_rate_limit_max_requests: Max requests per period
+  setting_api_rate_limit_period: Period (seconds)
+  setting_api_rate_limit_max_ips: Max tracked IPs
   setting_default_projects_tracker_ids: Default trackers for new projects
   setting_mail_handler_excluded_filenames: Exclude attachments by name
   setting_force_default_language_for_anonymous: Force default language for anonymous users
@@ -1125,6 +1130,7 @@ en:
   label_position: Position
   label_message: Message
   label_api: API
+  label_api_rate_limiting: API Rate Limiting
   label_field_format_enumeration: Key/value list
   label_default_values_for_new_users: Default values for new users
   label_relations: Relations

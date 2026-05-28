@@ -192,6 +192,15 @@ class Setting < ApplicationRecord
         messages << [:mail_from, l('activerecord.errors.messages.invalid')]
       end
     end
+    [
+      :api_rate_limit_max_requests,
+      :api_rate_limit_period,
+      :api_rate_limit_max_ips
+    ].each do |key|
+      if settings.key?(key) && settings[key].to_i < 1
+        messages << [key, l('activerecord.errors.messages.greater_than', :count => 0)]
+      end
+    end
     messages
   end
 

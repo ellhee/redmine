@@ -300,4 +300,104 @@ class SettingsControllerTest < Redmine::ControllerTest
     assert_equal '1', Setting.mail_handler_enable_regex_delimiters
     assert_equal 'On .*, .* at .*, .* <.*<mailto:.*>> wrote:', Setting.mail_handler_body_delimiters
   end
+
+  # --- API Rate Limiting settings (US2) ---
+
+  def test_api_tab_shows_rate_limiting_fields
+    Redmine::RateLimit.reset_store!
+    get :edit, :params => {:tab => 'api'}
+    assert_response :success
+    assert_select 'input[name=?]', 'settings[api_rate_limiting_enabled]'
+    assert_select 'input[name=?]', 'settings[api_rate_limit_max_requests]'
+    assert_select 'input[name=?]', 'settings[api_rate_limit_period]'
+    assert_select 'input[name=?]', 'settings[api_rate_limit_max_ips]'
+  end
+
+  def test_save_rate_limit_settings_updates_values
+    Redmine::RateLimit.reset_store!
+    post :edit, :params => {
+      :tab => 'api',
+      :settings => {
+        :api_rate_limiting_enabled   => '1',
+        :api_rate_limit_max_requests => '50',
+        :api_rate_limit_period       => '120',
+        :api_rate_limit_max_ips      => '5000'
+      }
+    }
+    assert_redirected_to settings_path(:tab => 'api')
+    assert_equal '1',    Setting.api_rate_limiting_enabled
+    assert_equal '50',   Setting.api_rate_limit_max_requests.to_s
+    assert_equal '120',  Setting.api_rate_limit_period.to_s
+    assert_equal '5000', Setting.api_rate_limit_max_ips.to_s
+  end
+
+  def test_save_invalid_max_requests_shows_error
+    Redmine::RateLimit.reset_store!
+    post :edit, :params => {
+      :settings => {
+        :api_rate_limiting_enabled   => '1',
+        :api_rate_limit_max_requests => '0',
+        :api_rate_limit_period       => '60',
+        :api_rate_limit_max_ips      => '1000'
+      }
+    }
+    assert_response :success
+    assert_select_error /api_rate_limit_max_requests|Max requests/i
+  end
+
+  def test_save_invalid_period_shows_error
+    Redmine::RateLimit.reset_store!
+    post :edit, :params => {
+      :settings => {
+        :api_rate_limiting_enabled   => '1',
+        :api_rate_limit_max_requests => '100',
+        :api_rate_limit_period       => '0',
+        :api_rate_limit_max_ips      => '1000'
+      }
+    }
+    assert_response :success
+    assert_select_error /api_rate_limit_period|Period/i
+  end
+
+  def test_save_invalid_max_ips_shows_error
+    Redmine::RateLimit.reset_store!
+    post :edit, :params => {
+      :settings => {
+        :api_rate_limiting_enabled   => '1',
+        :api_rate_limit_max_requests => '100',
+        :api_rate_limit_period       => '60',
+        :api_rate_limit_max_ips      => '0'
+      }
+    }
+    assert_response :success
+    assert_select_error /api_rate_limit_max_ips|Max tracked IPs/i
+  end
+
+  def test_save_rate_limit_settings_resets_store
+    Redmine::RateLimit.reset_store!
+    Setting.api_rate_limiting_enabled   = '1'
+    Setting.api_rate_limit_max_requests = '1'
+    Setting.api_rate_limit_period       = '300'
+    Setting.api_rate_limit_max_ips      = '10000'
+
+    # Exhaust the limit for an IP so it becomes blocked
+    Redmine::RateLimit.check('1.2.3.4')
+    assert_equal :denied, Redmine::RateLimit.check('1.2.3.4')[:status],
+                 "IP should be blocked before settings save"
+
+    post :edit, :params => {
+      :tab => 'api',
+      :settings => {
+        :api_rate_limiting_enabled   => '1',
+        :api_rate_limit_max_requests => '100',
+        :api_rate_limit_period       => '60',
+        :api_rate_limit_max_ips      => '10000'
+      }
+    }
+    assert_redirected_to settings_path(:tab => 'api')
+
+    # After settings save the store is reset — previously blocked IP should be allowed again
+    assert_equal :allowed, Redmine::RateLimit.check('1.2.3.4')[:status],
+                 "IP should be unblocked after settings save resets the store"
+  end
 end

@@ -198,7 +198,7 @@ class Redmine::RateLimitTest < ActiveSupport::TestCase
       results = []
       mutex = Mutex.new
 
-      threads = 20.times.map do
+      threads = Array.new(20) do
         Thread.new do
           result = Redmine::RateLimit.check('10.0.0.1')
           mutex.synchronize { results << result[:status] }

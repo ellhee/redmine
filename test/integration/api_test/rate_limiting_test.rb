@@ -82,7 +82,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
     with_rate_limit_settings(max_requests: '3', period: '60') do
       3.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }
       get '/issues.json', :headers => credentials('jsmith', 'jsmith')
-      assert_response 429
+      assert_response :too_many_requests
     end
   end
 
@@ -90,7 +90,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
     with_rate_limit_settings(max_requests: '2', period: '60') do
       2.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }
       get '/issues.json', :headers => credentials('jsmith', 'jsmith')
-      assert_response 429
+      assert_response :too_many_requests
       retry_after = response.headers['Retry-After'].to_i
       assert retry_after >= 1, "Retry-After should be a positive integer, got #{retry_after}"
     end
@@ -103,7 +103,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
 
       # Request with INVALID token while over limit
       get '/issues.json', :headers => credentials('invalid_token_xyz', 'X')
-      assert_response 429
+      assert_response :too_many_requests
       body_invalid_token = response.body
 
       # Reset store and exhaust limit again
@@ -112,7 +112,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
 
       # Request with VALID token while over limit
       get '/issues.json', :headers => credentials('jsmith', 'jsmith')
-      assert_response 429
+      assert_response :too_many_requests
       body_valid_token = response.body
 
       # Bodies must be identical — rate limit does not reveal token validity (FR-011)
@@ -125,7 +125,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
     with_rate_limit_settings(max_requests: '3', period: '60') do
       3.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }
       get '/issues.json', :headers => credentials('jsmith', 'jsmith')
-      assert_response 429, "Valid token should still get 429 when limit exceeded (US1 scenario 3)"
+      assert_response :too_many_requests, "Valid token should still get 429 when limit exceeded (US1 scenario 3)"
     end
   end
 
@@ -145,7 +145,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
 
       # Verify we are over the limit
       get '/issues.json', :headers => credentials('jsmith', 'jsmith')
-      assert_response 429
+      assert_response :too_many_requests
 
       # Advance time past the window — capture now BEFORE stubbing
       now = Time.now
@@ -173,7 +173,7 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
 
       # Third request exceeds limit for this forwarded IP
       get '/issues.json', :headers => headers_with_xff
-      assert_response 429, "Requests from X-Forwarded-For IP should be rate limited"
+      assert_response :too_many_requests, "Requests from X-Forwarded-For IP should be rate limited"
     end
   end
 

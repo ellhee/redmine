@@ -113,12 +113,11 @@ module Redmine
             # Window rolled over — prev_count is old, curr is zero (no new traffic)
             weight_prev  = [0.0, (period - (elapsed - period)) / period.to_f].max
             approx_count = record.prev_count * weight_prev
-            approx_count < 1.0
           else
             weight_prev  = (period - elapsed) / period.to_f
             approx_count = record.prev_count * weight_prev + record.curr_count
-            approx_count < 1.0
           end
+          approx_count < 1.0
         end
       end
     end

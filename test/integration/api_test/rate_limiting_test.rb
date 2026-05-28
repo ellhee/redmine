@@ -177,6 +177,34 @@ class Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base
     end
   end
 
+  # --- Settings change cycle ---
+
+  def test_toggle_rate_limiting_on_off_on_does_not_raise
+    # Step 1: enable and exhaust the limit
+    with_rate_limit_settings(max_requests: '2', period: '60') do
+      2.times { get '/issues.json', :headers => credentials('jsmith', 'jsmith') }
+      get '/issues.json', :headers => credentials('jsmith', 'jsmith')
+      assert_response :too_many_requests
+    end
+
+    # Step 2: disable — requests succeed again
+    Setting.api_rate_limiting_enabled = '0'
+    get '/issues.json', :headers => credentials('jsmith', 'jsmith')
+    assert_response :success
+
+    # Step 3: re-enable via settings save (reproduces the String max_size bug)
+    # settings_controller passes Setting.api_rate_limit_max_ips (String) to reset_store!
+    assert_nothing_raised do
+      Setting.api_rate_limit_max_ips = '1000'
+      Redmine::RateLimit.reset_store!(max_size: Setting.api_rate_limit_max_ips)
+    end
+    Setting.api_rate_limiting_enabled = '1'
+
+    # Step 4: first request after re-enable should succeed, not raise ArgumentError
+    get '/issues.json', :headers => credentials('jsmith', 'jsmith')
+    assert_response :success
+  end
+
   # --- FR-007: X-Forwarded-For ---
 
   def test_rate_limit_applies_to_real_ip_from_x_forwarded_for

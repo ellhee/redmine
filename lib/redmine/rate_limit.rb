@@ -147,9 +147,10 @@ module Redmine
 
       # Replaces the store with a fresh empty instance.
       # Call this whenever rate-limit settings change.
+      # max_size is coerced to Integer to guard against String values from Setting[].
       def reset_store!(max_size: 10_000)
         @store_mutex.synchronize do
-          @store = Store.new(max_size)
+          @store = Store.new(max_size.to_i)
         end
       end
 

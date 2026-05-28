@@ -336,6 +336,18 @@ rest_api_enabled:
 jsonp_enabled:
   default: 0
   security_notifications: 1
+api_rate_limiting_enabled:
+  default: 0
+  security_notifications: 1
+api_rate_limit_max_requests:
+  format: int
+  default: 300
+api_rate_limit_period:
+  format: int
+  default: 300
+api_rate_limit_max_ips:
+  format: int
+  default: 10000
 default_notification_option:
   default: 'only_assigned'
 emails_header:

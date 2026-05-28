@@ -38,6 +38,9 @@ class SettingsController < ApplicationController
     if request.post?
       errors = Setting.set_all_from_params(params[:settings].to_unsafe_hash)
       if errors.blank?
+        if params[:settings].to_unsafe_hash.keys.any? {|k| k.to_s.start_with?('api_rate_limit')}
+          Redmine::RateLimit.reset_store!(max_size: Setting.api_rate_limit_max_ips)
+        end
         flash[:notice] = l(:notice_successful_update)
         redirect_to settings_path(:tab => params[:tab])
         return

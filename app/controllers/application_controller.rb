@@ -61,6 +61,7 @@ class ApplicationController < ActionController::Base
     end
   end
 
+  prepend_before_action :check_api_rate_limit
   before_action :session_expiration, :user_setup, :check_if_login_required, :set_localization, :check_password_change, :check_twofa_activation
   after_action :record_project_usage
 
@@ -718,6 +719,23 @@ class ApplicationController < ActionController::Base
   # Returns a string that can be used as filename value in Content-Disposition header
   def filename_for_content_disposition(name)
     name
+  end
+
+  def check_api_rate_limit
+    return unless api_request?
+
+    result = Redmine::RateLimit.check(request.remote_ip)
+    return if result[:status] == :disabled || result[:status] == :untracked
+
+    response.headers['X-RateLimit-Limit']     = Setting.api_rate_limit_max_requests.to_s
+    response.headers['X-RateLimit-Remaining'] = result[:remaining].to_s
+    response.headers['X-RateLimit-Reset']     = result[:reset_at].to_s
+
+    if result[:status] == :denied
+      retry_after = [result[:reset_at] - Time.now.to_i, 1].max
+      response.headers['Retry-After'] = retry_after.to_s
+      render_error :status => 429, :message => :error_rate_limit_exceeded
+    end
   end
 
   def api_request?

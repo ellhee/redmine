@@ -24,9 +24,9 @@ description: "Задачи реализации: API Rate Limiting"
 
 **Цель**: добавить конфигурацию и строки локализации — без них нельзя обращаться к `Setting.api_rate_*` и выводить UI.
 
-- [ ] T001 Добавить 4 настройки rate limiting в `config/settings.yml` после блока `jsonp_enabled`: ключи `api_rate_limiting_enabled` (default: 0, security_notifications: 1), `api_rate_limit_max_requests` (format: int, default: 300), `api_rate_limit_period` (format: int, default: 300), `api_rate_limit_max_ips` (format: int, default: 10000)
+- [x] T001 Добавить 4 настройки rate limiting в `config/settings.yml` после блока `jsonp_enabled`: ключи `api_rate_limiting_enabled` (default: 0, security_notifications: 1), `api_rate_limit_max_requests` (format: int, default: 300), `api_rate_limit_period` (format: int, default: 300), `api_rate_limit_max_ips` (format: int, default: 10000)
 
-- [ ] T002 [P] Добавить I18n ключи в `config/locales/en.yml`: `setting_api_rate_limiting_enabled: "Enable API rate limiting"`, `setting_api_rate_limit_max_requests: "Max requests per period"`, `setting_api_rate_limit_period: "Period (seconds)"`, `setting_api_rate_limit_max_ips: "Max tracked IPs"`, `error_rate_limit_exceeded: "Rate limit exceeded. Please try again later."`, `label_api_rate_limiting: "API Rate Limiting"`
+- [x] T002 [P] Добавить I18n ключи в `config/locales/en.yml`: `setting_api_rate_limiting_enabled: "Enable API rate limiting"`, `setting_api_rate_limit_max_requests: "Max requests per period"`, `setting_api_rate_limit_period: "Period (seconds)"`, `setting_api_rate_limit_max_ips: "Max tracked IPs"`, `error_rate_limit_exceeded: "Rate limit exceeded. Please try again later."`, `label_api_rate_limiting: "API Rate Limiting"`
 
 **Checkpoint**: `Setting.api_rate_limiting_enabled?` возвращает false; `l(:error_rate_limit_exceeded)` возвращает строку.
 
@@ -40,7 +40,7 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Тесты Foundation ⚠️ Написать первыми
 
-- [ ] T003 Написать unit-тесты в `test/unit/lib/redmine/rate_limit_test.rb` для `Redmine::RateLimit` и `Redmine::RateLimit::Store`. Файл наследует `ActiveSupport::TestCase`, `frozen_string_literal: true`, GPL-заголовок, `require_relative '../../test_helper'`. В `setup` вызывать `Redmine::RateLimit.reset_store!` для изоляции между тестами. Тест-кейсы:
+- [x] T003 Написать unit-тесты в `test/unit/lib/redmine/rate_limit_test.rb` для `Redmine::RateLimit` и `Redmine::RateLimit::Store`. Файл наследует `ActiveSupport::TestCase`, `frozen_string_literal: true`, GPL-заголовок, `require_relative '../../test_helper'`. В `setup` вызывать `Redmine::RateLimit.reset_store!` для изоляции между тестами. Тест-кейсы:
   - `test_check_returns_disabled_when_rate_limiting_is_off` — `Setting.api_rate_limiting_enabled` = 0; `Redmine::RateLimit.check('1.2.3.4')[:status]` == `:disabled`
   - `test_check_allows_request_within_limit` — enabled=1, max=5, period=60; 3 последовательных вызова `check` — каждый возвращает `status: :allowed`; `remaining` убывает (4, 3, 2)
   - `test_check_denies_request_at_limit` — enabled=1, max=3, period=60; после 3 вызовов `check` 4-й возвращает `status: :denied`, `remaining: 0`
@@ -57,7 +57,7 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Реализация Foundation
 
-- [ ] T004 Создать `lib/redmine/rate_limit.rb` — модуль `Redmine::RateLimit` с внутренним классом `Redmine::RateLimit::Store`. GPL-заголовок, `frozen_string_literal: true`. Store: `Hash<String, Struct(prev_count, curr_count, window_start, logged_this_window)>`, защищён `@mutex = Mutex.new`. Метод `check_and_record(ip, max_requests, period)`: (1) рассчитать `elapsed = now - window_start`; если `elapsed >= period` — сдвинуть окно (`prev = curr, curr = 0, window_start += period`); (2) аппроксимировать `approx = prev_count * ((period - elapsed) / period.to_f) + curr_count`; (3) если `approx >= max_requests` — вернуть `denied`; (4) при создании новой записи: если `size >= max_ips` — очистить стейлы; если всё ещё полно — вернуть `untracked` + `Rails.logger.warn`; (5) инкрементировать `curr_count`; вернуть `allowed` с `remaining` и `reset_at`. Публичный интерфейс модуля: `check(ip)` → Hash, `reset_store!(max_size:)` → new Store, `enabled?` → `Setting.api_rate_limiting_enabled?`
+- [x] T004 Создать `lib/redmine/rate_limit.rb` — модуль `Redmine::RateLimit` с внутренним классом `Redmine::RateLimit::Store`. GPL-заголовок, `frozen_string_literal: true`. Store: `Hash<String, Struct(prev_count, curr_count, window_start, logged_this_window)>`, защищён `@mutex = Mutex.new`. Метод `check_and_record(ip, max_requests, period)`: (1) рассчитать `elapsed = now - window_start`; если `elapsed >= period` — сдвинуть окно (`prev = curr, curr = 0, window_start += period`); (2) аппроксимировать `approx = prev_count * ((period - elapsed) / period.to_f) + curr_count`; (3) если `approx >= max_requests` — вернуть `denied`; (4) при создании новой записи: если `size >= max_ips` — очистить стейлы; если всё ещё полно — вернуть `untracked` + `Rails.logger.warn`; (5) инкрементировать `curr_count`; вернуть `allowed` с `remaining` и `reset_at`. Публичный интерфейс модуля: `check(ip)` → Hash, `reset_store!(max_size:)` → new Store, `enabled?` → `Setting.api_rate_limiting_enabled?`
 
 **Checkpoint**: `docker compose exec test bundle exec rake test TEST=test/unit/lib/redmine/rate_limit_test.rb` — все 13 тестов проходят.
 
@@ -71,7 +71,7 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Тесты US1 / US4 / US5 ⚠️ Написать первыми
 
-- [ ] T005 [P] Написать integration-тесты в `test/integration/api_test/rate_limiting_test.rb`. Класс `Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base`. GPL-заголовок, `frozen_string_literal: true`. В `setup`: `Setting.api_rate_limiting_enabled = '0'`; `Redmine::RateLimit.reset_store!`. В `teardown`: `Setting.api_rate_limiting_enabled = '0'`; `Redmine::RateLimit.reset_store!`. Использовать фикстуру пользователя `jsmith` / пароль `jsmith` для аутентифицированных запросов. Тест-кейсы:
+- [x] T005 [P] Написать integration-тесты в `test/integration/api_test/rate_limiting_test.rb`. Класс `Redmine::ApiTest::RateLimitingTest < Redmine::ApiTest::Base`. GPL-заголовок, `frozen_string_literal: true`. В `setup`: `Setting.api_rate_limiting_enabled = '0'`; `Redmine::RateLimit.reset_store!`. В `teardown`: `Setting.api_rate_limiting_enabled = '0'`; `Redmine::RateLimit.reset_store!`. Использовать фикстуру пользователя `jsmith` / пароль `jsmith` для аутентифицированных запросов. Тест-кейсы:
 
   **US5 — Выключено по умолчанию:**
   - `test_rate_limiting_disabled_by_default_returns_200` — `Setting.api_rate_limiting_enabled = '0'`; 5 запросов `GET /issues.json`; все возвращают 200
@@ -92,7 +92,7 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Реализация US1 / US4 / US5
 
-- [ ] T006 [US1] Добавить в `app/controllers/application_controller.rb`: (1) `prepend_before_action :check_api_rate_limit` в начало цепочки; (2) приватный метод `check_api_rate_limit`: вернуть если `!api_request?`; вызвать `result = Redmine::RateLimit.check(request.remote_ip)`; при `:disabled` или `:untracked` — вернуть; установить заголовки `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` в `response.headers`; при `:denied` — установить `Retry-After`, вызвать `render_error :status => 429, :message => :error_rate_limit_exceeded`
+- [x] T006 [US1] Добавить в `app/controllers/application_controller.rb`: (1) `prepend_before_action :check_api_rate_limit` в начало цепочки; (2) приватный метод `check_api_rate_limit`: вернуть если `!api_request?`; вызвать `result = Redmine::RateLimit.check(request.remote_ip)`; при `:disabled` или `:untracked` — вернуть; установить заголовки `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` в `response.headers`; при `:denied` — установить `Retry-After`, вызвать `render_error :status => 429, :message => :error_rate_limit_exceeded`
 
 **Checkpoint**: `docker compose exec test bundle exec rake test TEST=test/integration/api_test/rate_limiting_test.rb` — все 11 тестов проходят.
 
@@ -106,7 +106,7 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Тесты US2 ⚠️ Написать первыми
 
-- [ ] T007 [P] [US2] Добавить тест-кейсы в `test/functional/settings_controller_test.rb` (в существующий класс `SettingsControllerTest < Redmine::ControllerTest`). В `setup` тестов ниже: `Redmine::RateLimit.reset_store!`. Тест-кейсы:
+- [x] T007 [P] [US2] Добавить тест-кейсы в `test/functional/settings_controller_test.rb` (в существующий класс `SettingsControllerTest < Redmine::ControllerTest`). В `setup` тестов ниже: `Redmine::RateLimit.reset_store!`. Тест-кейсы:
   - `test_api_tab_shows_rate_limiting_fields` — `get :edit, params: {tab: 'api'}`; `assert_response :success`; `assert_select 'input[name="settings[api_rate_limiting_enabled]"]'`; `assert_select 'input[name="settings[api_rate_limit_max_requests]"]'`; `assert_select 'input[name="settings[api_rate_limit_period]"]'`; `assert_select 'input[name="settings[api_rate_limit_max_ips]"]'`
   - `test_save_rate_limit_settings_updates_values` — `post :edit, params: {tab: 'api', settings: {api_rate_limiting_enabled: '1', api_rate_limit_max_requests: '50', api_rate_limit_period: '120', api_rate_limit_max_ips: '5000'}}`; `assert_redirected_to`; `assert_equal '1', Setting.api_rate_limiting_enabled`; `assert_equal 50, Setting.api_rate_limit_max_requests`
   - `test_save_invalid_max_requests_shows_error` — `post :edit, params: {settings: {api_rate_limiting_enabled: '1', api_rate_limit_max_requests: '0', api_rate_limit_period: '60'}}`; `assert_response :success` (форма перерендерена); ответ содержит сообщение об ошибке валидации
@@ -116,9 +116,9 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Реализация US2
 
-- [ ] T008 [US2] Добавить в `app/views/settings/_api.html.erb` секцию rate limiting: `<p><%= setting_check_box :api_rate_limiting_enabled %></p>`; `<p><%= setting_text_field :api_rate_limit_max_requests, size: 6 %></p>`; `<p><%= setting_text_field :api_rate_limit_period, size: 6 %></p>`; `<p><%= setting_text_field :api_rate_limit_max_ips, size: 8 %></p>` — внутри существующего `div.box.tabular.settings`
+- [x] T008 [US2] Добавить в `app/views/settings/_api.html.erb` секцию rate limiting: `<p><%= setting_check_box :api_rate_limiting_enabled %></p>`; `<p><%= setting_text_field :api_rate_limit_max_requests, size: 6 %></p>`; `<p><%= setting_text_field :api_rate_limit_period, size: 6 %></p>`; `<p><%= setting_text_field :api_rate_limit_max_ips, size: 8 %></p>` — внутри существующего `div.box.tabular.settings`
 
-- [ ] T009 [US2] Добавить сброс хранилища счётчиков при сохранении настроек rate limiting: в `app/controllers/settings_controller.rb` в методе `edit` (ветка `post`) — после вызова `Setting.set_all_from_params` проверить, изменились ли ключи `api_rate_limit_*`; если да — вызвать `Redmine::RateLimit.reset_store!(max_size: Setting.api_rate_limit_max_ips)`. Добавить валидацию: `api_rate_limit_max_requests > 0`, `api_rate_limit_period > 0`, `api_rate_limit_max_ips > 0` — при нарушении перерендерить форму с `flash[:error]`.
+- [x] T009 [US2] Добавить сброс хранилища счётчиков при сохранении настроек rate limiting: в `app/controllers/settings_controller.rb` в методе `edit` (ветка `post`) — после вызова `Setting.set_all_from_params` проверить, изменились ли ключи `api_rate_limit_*`; если да — вызвать `Redmine::RateLimit.reset_store!(max_size: Setting.api_rate_limit_max_ips)`. Добавить валидацию: `api_rate_limit_max_requests > 0`, `api_rate_limit_period > 0`, `api_rate_limit_max_ips > 0` — при нарушении перерендерить форму с `flash[:error]`.
 
 **Checkpoint**: `docker compose exec test bundle exec rake test TEST=test/functional/settings_controller_test.rb` — новые тесты проходят.
 
@@ -132,7 +132,7 @@ description: "Задачи реализации: API Rate Limiting"
 
 ### Тест US6 ⚠️ Написать первым
 
-- [ ] T010 [US6] Добавить тест `test_concurrent_requests_do_not_exceed_limit` в `test/unit/lib/redmine/rate_limit_test.rb`: `max = 10`; запустить 20 потоков (`Thread.new { Redmine::RateLimit.check('10.0.0.1') }`), дождаться все (`threads.each(&:join)`); посчитать результаты `:allowed` и `:denied`; `assert_equal max, allowed_count`; `assert_equal 10, denied_count`. Тест проверяет, что Mutex не даёт обойти лимит через параллельность.
+- [x] T010 [US6] Добавить тест `test_concurrent_requests_do_not_exceed_limit` в `test/unit/lib/redmine/rate_limit_test.rb`: `max = 10`; запустить 20 потоков (`Thread.new { Redmine::RateLimit.check('10.0.0.1') }`), дождаться все (`threads.each(&:join)`); посчитать результаты `:allowed` и `:denied`; `assert_equal max, allowed_count`; `assert_equal 10, denied_count`. Тест проверяет, что Mutex не даёт обойти лимит через параллельность.
 
 **Checkpoint**: `docker compose exec test bundle exec rake test TEST=test/unit/lib/redmine/rate_limit_test.rb` — все 14 тестов проходят (13 из T003 + 1 из T010).
 
@@ -142,9 +142,9 @@ description: "Задачи реализации: API Rate Limiting"
 
 **Цель**: финальная проверка, документация, убедиться что всё собирается.
 
-- [ ] T011 [P] Убедиться что в `lib/redmine/rate_limit.rb` присутствуют: `# frozen_string_literal: true` (первая строка) и GPL-заголовок (строки 2–17) по образцу любого файла из `lib/redmine/`
+- [x] T011 [P] Убедиться что в `lib/redmine/rate_limit.rb` присутствуют: `# frozen_string_literal: true` (первая строка) и GPL-заголовок (строки 2–17) по образцу любого файла из `lib/redmine/`
 
-- [ ] T012 Запустить полный набор тестов трёх уровней и убедиться, что все проходят:
+- [x] T012 Запустить полный набор тестов трёх уровней и убедиться, что все проходят:
   ```
   docker compose exec test bundle exec rake test TEST=test/unit/lib/redmine/rate_limit_test.rb
   docker compose exec test bundle exec rake test TEST=test/functional/settings_controller_test.rb
@@ -152,7 +152,7 @@ description: "Задачи реализации: API Rate Limiting"
   ```
   Проверить отсутствие регрессий в `test/integration/api_test/authentication_test.rb` (rate limiting не должен ломать существующую аутентификацию).
 
-- [ ] T013 [P] Проверить quickstart.md — выполнить шаги вручную или через Docker: включить rate limiting в admin UI, выполнить curl-команды из quickstart, убедиться что заголовки и 429 выглядят как ожидается; при обнаружении несоответствий — обновить quickstart.md
+- [x] T013 [P] Проверить quickstart.md — выполнить шаги вручную или через Docker: включить rate limiting в admin UI, выполнить curl-команды из quickstart, убедиться что заголовки и 429 выглядят как ожидается; при обнаружении несоответствий — обновить quickstart.md
 
 ---
 

@@ -52,373 +52,371 @@ Brief documentation covering:
 
 </details>
 
-## Ссылка на Pull Request с решением
+## Pull Request
+
 [Add IP-based API rate limiting to protect against token brute-force](https://github.com/ellhee/redmine/pull/2)
 
 [Quickstart](https://github.com/ellhee/redmine/blob/001-api-rate-limit/specs/001-api-rate-limit/quickstart.md)
 
-## Выбор слайса
+## Slice selection
 
-- Если читать именно тикет, то в нем видны еще несколько частей, помимо указаных трех в тестовом задании (например 2FA bypass и проблемы логирования). Я предполагаю, что ограничения тестового задания имеет больший приоритет и рассматриваю только 3 подзадачи, указанные в нем:
-    - время жизни токена,
-    - области действия
-    - ограничение количества запросов.
-- Также я рассуждаю в контексте ограниченности ресурсов рекомендуемым временем выполнения в 2 часа.
+- Reading the ticket carefully, I can see several parts beyond the three listed in the task (e.g. 2FA bypass and logging issues). I assume the task constraints take higher priority and consider only the 3 sub-tasks listed there:
+    - Token expiration
+    - Scopes
+    - Rate limiting
+- I also reason within the constraint of the recommended 2-hour time limit.
 
-Изначально я исключаю scopes-задачу, требующей большого погружения в проект, рассмотрения имеющихся scopes. Также ценность от ее изолированной реализации не так высока — архитектурно мы скорее хотим ограничивать scopes для множественных токенов, формируя их под разные задачи.
+I initially ruled out the scopes task, as it requires deep immersion in the project and a review of existing scopes. The value from an isolated implementation of scopes is also not that high — architecturally we would rather restrict scopes for multiple tokens, tailoring them for different purposes.
 
-Далее я исключаю время жизни токена — у нее хорошее соотношение пользы и затрат, в реальном проекте скорее была бы выбрана она. Но техническое решение довольно понятное: расширение таблицы токенов новым полем и его контроль — возможно эта задача даст меньше возможностей именно в контексте тестового задания.
-Больше сложности вызывает продуктовое решение — как сообщить пользователю об истечении срока жизни токена и инициировать процесс получения нового, здесь будет проблемой плохое знакомство с продуктом.
+Next I ruled out token expiration — it has a good cost/benefit ratio and in a real project it would likely have been chosen instead. But the technical solution is fairly straightforward: adding a new field to the tokens table and enforcing it — this task would likely give less signal in the context of the assignment. The product decision is harder: how to notify the user that a token has expired and initiate the process of obtaining a new one; poor familiarity with the product would be a problem here.
 
-В итоге я выбираю ограничение количества запросов:
-- Значимая функция (защита от брутфорса токенов и bulk data extraction)
-- Достаточно изолированная и проверяемая
-- Требует интеграции с Rails stack — даст больше сигнала в контексте тестового задания
-- Укладывается в ~2 часа
+In the end I chose rate limiting:
+- Meaningful feature (protection against token brute-force and bulk data extraction)
+- Sufficiently isolated and verifiable
+- Requires integration with the Rails stack — gives more signal in the context of the assignment
+- Fits within ~2 hours
 
-Для того, чтобы за рекомендованное время выполнить задачу и в целом не брать огромный скоуп в работу я допускаю следующее:
-- Ограничение по IP (защищает и от брутфорса, не только от конкретного токена)
-- In-memory реализация без Redis
+To complete the task within the recommended time and avoid taking on a huge scope, I allowed the following shortcuts:
+- IP-based limiting only (protects against brute-force, not just specific tokens)
+- In-memory implementation without Redis
 
-## Используемые инструменты
-- для локальной разработки и тестирования я использую контейнеры Docker
-- в качестве редактора кода Fleet от JetBrains (нет RubyMine)
-- Claude code + Claude desktop (модель Sonnet 4.6, High Effort)
-- ChatGPT / Gemini для обсуждения решений, ревью и получения знаний
-- Spec-kit фреймворк от Github
+## Tools used
+- Docker containers for local development and testing
+- JetBrains Fleet as the code editor (no RubyMine)
+- Claude Code + Claude Desktop (Sonnet 4.6 model, High Effort)
+- ChatGPT / Gemini for discussing solutions, review, and knowledge lookup
+- Spec-kit framework from GitHub
 
-## Подготовка
-Я клонировал форк репозитория.
-Для работы над задачей сделал новую ветку из последнего релиза (tag 6.1.2).
-Для развертывания я использовал Docker с двумя контейнерами для разработки и тестирования, а также технический контейнер с Postgres, объединенные composer.
-Для генерации конфигурации использовал Gemini, но сильно упростил итог, оставив минимум.
+## Setup
+I cloned a fork of the repository and created a new branch from the latest release (tag 6.1.2).
+For deployment I used Docker with two containers for development and testing, plus a Postgres container, all tied together with Compose.
+I used Gemini to generate the Docker configuration but simplified the result significantly, keeping only the minimum.
 
-При первом запуске получил сообщение `Please configure your config/database.yml first`, которое сохранилось и после добавления файла.
-Здесь Gemini при поиске проблем застрял, удостоверившись, что файла не существует на этапе установки гемов, решил самостоятельно — понял, что в Dockerfile для этапа копируется только `Gemfile`, добавил туда и `database.yml`.
+On first run I got `Please configure your config/database.yml first`, which persisted even after adding the file.
+Gemini got stuck here, having confirmed that the file was missing at the gem installation stage. I solved it myself — I noticed that the Dockerfile only copies `Gemfile` at that stage, so I added `database.yml` there as well.
 
-Открыл веб-интерфейс (http://localhost:300), запустил миграции через консоль, посмотрел устройство, администрирование, включил API.
-Запустил прогон тестов, отдельной командой создав и подготовив базу данных (формат команды подсказал Gemini).
+I opened the web interface (http://localhost:3000), ran migrations from the console, explored the UI and admin panel, and enabled the API.
+I ran the test suite and created and prepared the test database with a separate command (the format was suggested by Gemini).
 
-Этот этап занял около 20 минут.
+This stage took about 20 minutes.
 
-## Основная задача
+## Main task
 
-### Сбор информации о проекте
+### Gathering project information
 
-В новой сессии Claude запустил команду сбора фундаментальной информации о кодовой базе
+In a new Claude session I ran the skill for collecting fundamental codebase information.
 
 <details>
-<summary>Скилл speckit-constitution</summary>
+<summary>speckit-constitution skill</summary>
 
-**/speckit-constitution** Это проект Redmine, написаный на Ruby on Rails. Удели внимание тому, какие подходы уже используются для написания кода, какие инструменты включены. Отдельно посмотри структуру тестов и их содержимое, что проверяется обычно и на каком уровне
+**/speckit-constitution** This is a Redmine project written on Ruby on Rails. Pay attention to the coding approaches already used, what tools are included. Look separately at the test structure and contents — what is typically tested and at what level.
 
-Начинаю изучение проекта: читаю структуру, конституцию и тесты.
-Git уже инициализирован, продолжаю. Теперь исследую проект для заполнения конституции.
+Starting project exploration: reading structure, constitution and tests.
+Git is already initialised, continuing. Now exploring the project to fill in the constitution.
 Ran 20 commands, read 5 files
-Достаточно данных. Теперь смотрю CONTRIBUTING и несколько ключевых моделей.
-Собрал всё необходимое. Пишу конституцию.
+Enough data. Now looking at CONTRIBUTING and a few key models.
+Gathered everything needed. Writing the constitution.
 
 Constitution authoring
 Updated
 constitution.md +174 -0
-Конституция записана. Теперь проверяю шаблоны на совместимость.
+Constitution written. Now checking templates for compatibility.
 
 Ran
 Check plan template references to constitution
-Plan-шаблон содержит Constitution Check секцию — обновлю её, чтобы она ссылалась на реальные принципы.
+The plan template contains a Constitution Check section — will update it to reference the real principles.
 
 Edited
 plan-template.md +8 -1
 
-Итог
-Конституция Redmine создана
+Result
+Redmine Constitution created
 
-| # | Принцип | Ключевое правило |
+| # | Principle | Key rule |
 | :--- | :--- | :--- |
-| **I** | **Rails Conventions First** | MVC, frozen_string_literal, GPL-заголовок, бизнес-логика в моделях |
-| **II** | **Multi-Level Test Coverage** | Unit → Functional → Integration → API; запуск через Docker |
-| **III** | **Fixtures as Test Data Authority** | 53 YAML-фикстуры — единственный источник тестовых данных |
-| **IV** | **Plugin-Based Extensibility** | Плагины в plugins/, расширения ядра — через lib/redmine/ |
-| **V** | **REST API Parity** | Каждая UI CRUD-операция доступна через REST (JSON + XML) |
-| **VI** | **Internationalization** | Все строки через I18n; нет хардкода на английском в ERB |
+| **I** | **Rails Conventions First** | MVC, frozen_string_literal, GPL header, business logic in models |
+| **II** | **Multi-Level Test Coverage** | Unit → Functional → Integration → API; run via Docker |
+| **III** | **Fixtures as Test Data Authority** | 53 YAML fixtures — the sole source of test data |
+| **IV** | **Plugin-Based Extensibility** | Plugins in plugins/, core extensions via lib/redmine/ |
+| **V** | **REST API Parity** | Every UI CRUD operation available via REST (JSON + XML) |
+| **VI** | **Internationalization** | All strings via I18n; no English hardcoded in ERB |
 
-Что обновлено
+What was updated
 
-✅ .specify/memory/constitution.md — создан с нуля (был только шаблон)
+✅ .specify/memory/constitution.md — created from scratch (only a template existed before)
 
-✅ .specify/templates/plan-template.md — Constitution Check заменён конкретными чеклистами по принципам I–VI
+✅ .specify/templates/plan-template.md — Constitution Check replaced with concrete checklists for principles I–VI
 
-✅ .specify/templates/spec-template.md — совместим, изменений не требует
+✅ .specify/templates/spec-template.md — compatible, no changes needed
 
-✅ .specify/templates/tasks-template.md — совместим, пути src//tests/ заменяются на app//test/ при генерации задач
-
+✅ .specify/templates/tasks-template.md — compatible, src//tests/ paths are replaced with app//test/ during task generation
 
 </details>
 
-Мельком просмотрел содержимое — я не знаком с Rails и проектом, поэтому решил не тратить время и положиться на качество сбора информации скиллом.
+I skimmed the output — I am not familiar with Rails or the project, so I decided not to spend time on it and rely on the quality of the skill's information gathering.
 
-Попросил проверить наличие линтера.
+I asked it to check for a linter.
 
-Пока шло выполнение, параллельно в Gemini посмотрел, какие есть способы реализации: классический middleware-подход и использование before_action.
-Предварительно выбрал before_action, хотя он будет менее производительным из-за инициализации большего количества слоев.
+While that was running I looked in Gemini in parallel at the available implementation approaches: the classic middleware approach and using before_action.
+I tentatively chose before_action, even though it is less performant due to initialising more layers.
 
-Middleware посчитал менее подходящим из-за того, что:
-- судя по имещюимся настройкам и внешнему виду администрирования, мы хотим управлять ограниченим тоже из веб-интерфейса, что ведет к взаимодействию с Settings в реализации
-- в будущем, согласно тикету, эта система может быть дополнена token-based ограничениями, что тоже добавит работу на уровне модели Token
+I considered middleware less suitable because:
+- Given the existing settings and the look of the admin UI, we want to manage the limit from the web interface too, which means interacting with Settings in the implementation
+- In the future, per the ticket, this system may be extended with token-based limiting, which would also add work at the Token model level
 
-Суммарно это выглядит большим выходом за рамки чисто HTTP-слоя Middleware, при этом разницу в производительности я считаю допустимой.
+Overall this looks like more than what belongs strictly in the HTTP-layer Middleware, and I consider the performance difference acceptable.
 
-### Проектирование
+### Design
 
 <details>
-<summary>Скилл speckit-specify</summary>
+<summary>speckit-specify skill</summary>
 
 **/speckit-specify**
-Нам необходимо ограничение количества запросов (Rate Limit) для API.
-В первоначальной версии делаем только на основе IP, в будущем этот функционал может быть доработан до token-based варианта и их комбинации.
-По умолчанию ограничение выключено.
-Ограничение (включение и параметры) администрируется через веб-страницу настроек администратором по аналогии с другим функционалом
+We need rate limiting for the API.
+In the initial version we only do IP-based limiting; in the future this feature can be extended to token-based and combined variants.
+Rate limiting is disabled by default.
+The limit (enabling it and its parameters) is administered via the settings web page by an administrator, in the same way as other features.
 
-Ветка уже существует, скрипт вернул BRANCH_NAME: "001-api-rate-limit", FEATURE_NUM: "001". Создаю директорию спецификации и пишу spec.md.
+Branch already exists, script returned BRANCH_NAME: "001-api-rate-limit", FEATURE_NUM: "001". Creating the specification directory and writing spec.md.
 
-Теперь провожу валидацию качества спецификации и создаю чеклист.
+Now running the specification quality validation and creating the checklist.
 
 Created requirements.md +36 -0
 
-Спецификация создана
-- Директория: specs/001-api-rate-limit/
-- Файл спецификации: specs/001-api-rate-limit/spec.md
-- Чеклист: specs/001-api-rate-limit/checklists/requirements.md
+Specification created
+- Directory: specs/001-api-rate-limit/
+- Spec file: specs/001-api-rate-limit/spec.md
+- Checklist: specs/001-api-rate-limit/checklists/requirements.md
 
-Что описано в спецификации
-3 пользовательских сценария:
+What is described in the specification
+3 user stories:
 
-- P1 — Защита API от перегрузки: блокировка по IP с HTTP 429 + Retry-After
-- P1 — Административное управление: включение/настройка параметров через страницу настроек без перезапуска
-- P2 — Информирование клиента: заголовки X-RateLimit-* в ответах
-- 10 функциональных требований (FR-001..FR-010): выключено по умолчанию, IPv4/IPv6, X-Forwarded-For, только API-запросы, валидация параметров.
+- P1 — Protect API from abuse: block by IP with HTTP 429 + Retry-After
+- P1 — Admin management: enable/configure parameters via settings page without restart
+- P2 — Inform the client: X-RateLimit-* headers in responses
+- 10 functional requirements (FR-001..FR-010): disabled by default, IPv4/IPv6, X-Forwarded-For, API requests only, parameter validation.
 
-Чеклист валидации: ✅ все пункты пройдены, маркеров [NEEDS CLARIFICATION] нет.
+Validation checklist: ✅ all items passed, no [NEEDS CLARIFICATION] markers.
 
-Ключевые допущения v1
-- Только IP-based (token-based — в следующих версиях)
-- In-memory хранилище счётчиков
-- Единые настройки для всего API (без разграничения по эндпоинтам)
+Key v1 assumptions
+- IP-based only (token-based in future versions)
+- In-memory counter store
+- Uniform settings for the entire API (no per-endpoint differentiation)
 </details>
 
 <details>
-<summary>Уточнил цели</summary>
+<summary>Refined the goals</summary>
 
-Назначение задачи - защита от перебора токенов и предотвращение bulk data extraction
+The purpose of the task is protection against token brute-force and prevention of bulk data extraction.
 
-Важное уточнение назначения — обновлю спецификацию, чтобы эти цели явно отражались в контексте, сценариях и требованиях.
+Important clarification of purpose — will update the specification so these goals are explicitly reflected in the context, scenarios, and requirements.
 
 Read spec.md
-Это важное уточнение — меняет контекст с «защиты от перегрузки» на явную модель угроз безопасности. Обновляю спецификацию.
+This is an important clarification — it shifts the context from "protection against overload" to an explicit security threat model. Updating the specification.
 
 Edited spec.md +24 -16
-Спецификация обновлена. Ключевые изменения:
+Specification updated. Key changes:
 
-Что изменилось:
+What changed:
 
-- Назначение — явно указаны две угрозы: перебор токенов и bulk data extraction
-- Сценарий 1 — переориентирован на атаку перебора токенов: лимит срабатывает независимо от корректности токена, даже если токен верный — IP всё равно блокируется
-- FR-002 — добавлено: счётчик инкрементируется до проверки аутентификации (иначе атака перебора будет работать)
-- FR-011 — новое требование: тело ответа 429 не должно раскрывать, существует ли аккаунт или верен ли токен
-- SC-001, SC-002 — критерии успеха теперь явно описывают защиту от конкретных угроз
-- Граничные случаи — добавлены: NAT/корпоративные сети, применение лимита к 401-ответам
-- Допущения — зафиксирован компромисс с NAT и мотивация применения лимита до аутентификации
+- Purpose — two threats explicitly named: token brute-force and bulk data extraction
+- Scenario 1 — reoriented to a token brute-force attack: the limit fires regardless of token validity, even if the token is correct — the IP is still blocked
+- FR-002 — added: the counter is incremented before authentication is checked (otherwise the brute-force attack would work)
+- FR-011 — new requirement: the 429 response body must not reveal whether an account exists or whether the token is valid
+- SC-001, SC-002 — success criteria now explicitly describe protection against specific threats
+- Edge cases — added: NAT/corporate networks, applying the limit to 401 responses
+- Assumptions — NAT trade-off and rationale for applying the limit before authentication documented
 </details>
 
-Сделал ревью спецификации, пользовательских сценариев и требований
+I reviewed the specification, user stories, and requirements.
 
 <details>
 
-<summary>Скорректировал User Stories</summary>
+<summary>Adjusted User Stories</summary>
 
-Добавь пользовательский сценарий корректной работы (запросы укладываются в лимиты) и пользовательский сценарий работы без включения функционала - ничего не блокируется
+Add a user story for normal operation (requests stay within limits) and a user story for operating without the feature enabled — nothing is blocked.
 
-Читаю текущую спецификацию чтобы вставить сценарии в правильное место.
+Reading the current specification to insert the stories in the right place.
 
 Read a file, edited a file
-Сценарии 4 и 5 добавлены. Вот что описывает каждый:
+Stories 4 and 5 added. What each describes:
 
-Сценарий 4 — Нормальная работа (P1):
+Story 4 — Normal operation (P1):
 
-- Запросы в пределах лимита получают нормальные ответы
-- Заголовки X-RateLimit-Remaining убывают корректно
-- После сброса окна счётчик восстанавливается
-- Разные IP имеют независимые счётчики — не мешают друг другу
+- Requests within the limit receive normal responses
+- X-RateLimit-Remaining headers decrease correctly
+- After the window resets the counter recovers
+- Different IPs have independent counters — they don't interfere with each other
 
-Сценарий 5 — Выключенный rate limiting (P1):
+Story 5 — Rate limiting disabled (P1):
 
-- Ни один запрос не получает 429 в любом объёме
-- Заголовки X-RateLimit-* отсутствуют в ответах
-- Никакой проверки счётчиков не происходит (нет overhead)
-- При выключении уже заблокированные IP разблокируются
+- No request ever receives 429 regardless of volume
+- X-RateLimit-* headers are absent from responses
+- No counter checks happen (no overhead)
+- When disabled, previously blocked IPs are unblocked
 </details>
 
 <details>
-<summary>Требование потокобезопасности</summary>
+<summary>Thread safety requirement</summary>
 
-Добавь userstory для потокобезопасности
+Add a user story for thread safety.
 
-Сценарий 6 добавлен (P2). Три acceptance criteria покрывают:
+Story 6 added (P2). Three acceptance criteria cover:
 
-- Верхняя граница: при N+K одновременных запросах ровно N проходят, K блокируются — не больше
-- Отсутствие потерь: при параллельной записи в счётчик ни один инкремент не теряется
-- Изоляция: параллельная обработка разных IP не приводит к взаимному загрязнению счётчиков
+- Upper bound: with N+K concurrent requests exactly N pass, K are blocked — no more
+- No losses: with parallel writes to the counter no increment is lost
+- Isolation: parallel processing of different IPs does not cause mutual counter corruption
 </details>
 
-Критерий из User Story 5 показался мне довольно размытым "при выключенном ограничении не приходит 429" — в то время как мы хотим, чтобы при выключенном ограничении клиенты получали ответы.
+The criterion from User Story 5 seemed rather vague to me — "no 429 when limiting is disabled" — whereas we want clients to receive proper responses when limiting is disabled.
 
 <details>
-<summary>Уточнение User Story 5</summary>
+<summary>Clarifying User Story 5</summary>
 
-Обнови Сценарий 5 — Выключенный rate limiting - не просто отсутствие заголовков и 429, а получение полноценного ответа 200
+Update Story 5 — Rate limiting disabled — not just absence of headers and 429, but receiving a full 200 response.
 
-Обновлено. Теперь во всех четырёх acceptance criteria явно указан HTTP 200 (или другой штатный код) как ожидаемый результат, а не просто «отсутствие 429». Акцент сместился с «что не происходит» на «что должно происходить».
+Updated. All four acceptance criteria now explicitly state HTTP 200 (or other normal code) as the expected result, not merely "absence of 429". The emphasis has shifted from "what does not happen" to "what must happen".
 </details>
 
-Сделал анализ вспомогательным навыком speckit-clarify — он в том числе ищет неопределенности в спецификации задания
+I ran the speckit-clarify helper skill — it also searches for ambiguities in the feature specification.
 
 <details>
-<summary>Скилл speckit-clarify</summary>
+<summary>speckit-clarify skill</summary>
 
 /speckit-clarify
 
-Запускаю проверку prerequisites и загружаю спецификацию.
+Running prerequisites check and loading the specification.
 
 Ran a command, read a file
 
-Выполняю анализ покрытия спецификации по всем категориям.
+Running coverage analysis across all categories.
 
-| Категория | Статус | Примечание |
+| Category | Status | Note |
 | :--- | :--- | :--- |
-| Функциональный охват | ✅ Clear | Цели, роли, OOS описаны |
-| Модель данных | ⚠️ Partial | Нет определения типа временного окна |
-| UX-потоки | ✅ Clear | Сценарии администратора и клиента есть |
-| Производительность | ✅ Clear | SC-007 покрывает |
-| Масштабируемость | ⚠️ Partial | Нет верхней границы числа отслеживаемых IP |
-| Надёжность | ❌ Missing | Нет поведения при исчерпании памяти хранилища |
-| Наблюдаемость (логи/метрики) | ❌ Missing | Нет упоминания логирования событий блокировки |
-| Безопасность | ✅ Clear | FR-011, pre-auth check покрыты |
-| Интеграции | ✅ Clear | In-memory, нет внешних зависимостей |
-| Граничные случаи | ✅ Clear | Хорошо покрыты |
-| Ограничения/компромиссы | ✅ Clear | NAT-компромисс задокументирован |
-| Поведение при изменении настроек | ⚠️ Partial | Нет: что происходит со счётчиками при смене конфига |
-| Терминология | ✅ Clear | Консистентна |
+| Functional coverage | ✅ Clear | Goals, roles, OOS described |
+| Data model | ⚠️ Partial | Time window type not defined |
+| UX flows | ✅ Clear | Admin and client scenarios present |
+| Performance | ✅ Clear | SC-007 covers it |
+| Scalability | ⚠️ Partial | No upper bound on tracked IPs |
+| Reliability | ❌ Missing | No behaviour defined when store memory is exhausted |
+| Observability (logs/metrics) | ❌ Missing | No mention of block event logging |
+| Security | ✅ Clear | FR-011, pre-auth check covered |
+| Integrations | ✅ Clear | In-memory, no external dependencies |
+| Edge cases | ✅ Clear | Well covered |
+| Constraints/trade-offs | ✅ Clear | NAT trade-off documented |
+| Behaviour on settings change | ⚠️ Partial | Missing: what happens to counters when config changes |
+| Terminology | ✅ Clear | Consistent |
 
-**Вопрос 1 из 5: Тип временного окна**
+**Question 1 of 5: Time window type**
 
-Контекст: Спецификация говорит о «временном окне», но не уточняет его тип. Это ключевое архитектурное решение, влияющее на поведение на границе периода и эффективность защиты от брутфорса.
+Context: The specification mentions a "time window" but does not specify its type. This is a key architectural decision that affects boundary behaviour and brute-force protection effectiveness.
 
-Что нужно уточнить: Как работает временное окно счётчика — фиксированное или скользящее?
+What needs clarifying: How does the counter window work — fixed or sliding?
 
-Рекомендация: Вариант B (скользящее) — равномерно ограничивает поток в любой момент времени, нет эффекта «двойного всплеска» на стыке периодов, что важно для защиты от брутфорса.
+Recommendation: Option B (sliding) — uniformly limits traffic at any point in time, no "double burst" effect at period boundaries, which is important for brute-force protection.
 
-| Вариант | Описание |
+| Option | Description |
 | :--- | :--- |
-| **A** | **Фиксированное окно** — счётчик сбрасывается в фиксированные моменты (например, каждые 60 секунд по часам). Проще реализовать. Уязвимость: на стыке двух окон возможен всплеск до 2×N запросов. |
-| **B** | **Скользящее окно** — всегда смотрит на N секунд назад от текущего момента. Равномерная защита без пиков на стыке. Сложнее хранить. |
-| **C** | **Без разницы для v1** — оставить на усмотрение реализации, задокументировать как деталь. |
+| **A** | **Fixed window** — counter resets at fixed moments (e.g., every 60 seconds by the clock). Simpler to implement. Vulnerability: at the boundary of two windows a burst of up to 2×N requests is possible. |
+| **B** | **Sliding window** — always looks at the last N seconds from the current moment. Uniform protection without peaks at boundaries. Harder to store. |
+| **C** | **Doesn't matter for v1** — leave to the implementation, document as a detail. |
 
-Принято: скользящее окно. Обновляю спецификацию.
+Accepted: sliding window. Updating the specification.
 
-**Вопрос 2 из 5: Логирование событий блокировки**
+**Question 2 of 5: Block event logging**
 
-Контекст: Спецификация описывает защиту от брутфорса и bulk extraction, но не упоминает, должна ли система фиксировать факты блокировки. Без логов администратор не знает, работает ли rate limiting и атакуется ли система.
+Context: The specification describes protection against brute-force and bulk extraction, but does not mention whether the system should record block events. Without logs the administrator has no way to know whether rate limiting is working or whether the system is under attack.
 
-Что нужно уточнить: Должна ли система записывать в лог события превышения лимита (IP, время, количество запросов)?
+What needs clarifying: Should the system write limit-exceeded events to the log (IP, time, request count)?
 
-Рекомендация: Вариант A — события блокировки являются событиями безопасности, их отсутствие в логах делает защиту «слепой» и затрудняет расследование инцидентов.
+Recommendation: Option A — block events are security events; their absence from logs makes protection "blind" and hampers incident investigation.
 
-| Вариант | Описание |
+| Option | Description |
 | :--- | :--- |
-| **A** | **Логировать каждое срабатывание** — при первом 429 для IP в текущем окне писать в лог: IP, момент времени, число запросов. Повторные 429 в том же окне — не дублировать. |
-| **B** | **Логировать каждый 429** — записывать каждый отклонённый запрос отдельной строкой. |
-| **C** | **Не логировать** — логирование остаётся на усмотрение реализации, в спецификацию не включать. |
+| **A** | **Log each first trigger** — on the first 429 for an IP in the current window, write to the log: IP, timestamp, request count. Subsequent 429s in the same window — do not duplicate. |
+| **B** | **Log every 429** — record each rejected request as a separate log line. |
+| **C** | **Do not log** — leave logging to the implementation, do not include in the specification. |
 
-Принято: логировать первое срабатывание на IP за окно. Обновляю спецификацию.
+Accepted: log the first trigger per IP per window. Updating the specification.
 
-**Вопрос 3 из 5: Поведение при исчерпании памяти хранилища**
+**Question 3 of 5: Behaviour when the store runs out of memory**
 
-Контекст: Счётчики хранятся in-memory. При большом числе уникальных IP (например, при распределённой атаке) хранилище может расти неограниченно. Спецификация не определяет, что делать, когда достигнут предел — а это решение прямо влияет на надёжность сервера и безопасность.
+Context: Counters are stored in-memory. With a large number of unique IPs (e.g., during a distributed attack) the store can grow without bound. The specification does not define what to do when the limit is reached — and that decision directly affects server reliability and security.
 
-Что нужно уточнить: Что делает система, когда число отслеживаемых IP достигает максимально допустимого?
+What needs clarifying: What does the system do when the number of tracked IPs reaches the maximum?
 
-Рекомендация: Вариант A — вытеснение по LRU защищает память сервера, при этом продолжает работать для активных IP. «Забытый» IP при следующем запросе просто начнёт новый счётчик — допустимый компромисс.
+Recommendation: Option A — LRU eviction protects server memory while continuing to work for active IPs. A "forgotten" IP will simply start a new counter on its next request — an acceptable trade-off.
 
-| Вариант | Описание |
+| Option | Description |
 | :--- | :--- |
-| **A** | **Вытеснение LRU** — при достижении лимита вытесняется запись с наиболее давним последним запросом. Новый IP получает чистый счётчик. Максимальное число записей настраивается (с разумным дефолтом). |
-| **B** | **Отказ «открытый» (fail open)** — при превышении лимита записей новые IP не отслеживаются и пропускаются без ограничений. Приоритет доступности над безопасностью. |
-| **C** | **Не ограничивать** — хранилище растёт неограниченно; ответственность за память лежит на операционной конфигурации сервера. |
+| **A** | **LRU eviction** — when the limit is reached, the entry with the most distant last request is evicted. The new IP gets a clean counter. Maximum number of entries is configurable (with a sensible default). |
+| **B** | **Fail open** — when the entry limit is exceeded, new IPs are not tracked and are let through without restriction. Availability over security. |
+| **C** | **No limit** — the store grows without bound; memory responsibility lies with the server's operational configuration. |
 
-Давай очистку устаревших данных при достижении максимального количества записей (настраивается и имеет дефолтное значение)
+Let's use eviction of stale data when the maximum number of entries is reached (configurable with a default value).
 
-Принято: очистка устаревших записей при достижении лимита. Обновляю спецификацию.
+Accepted: evict stale entries when the limit is reached. Updating the specification.
 
-**Вопрос 4 из 5: Поведение счётчиков при изменении настроек администратором**
+**Question 4 of 5: Counter behaviour when the administrator changes settings**
 
-Контекст: Администратор может изменить параметры в любой момент — например, уменьшить лимит с 200 до 50 или изменить длину окна. Спецификация не определяет, что происходит с уже накопленными счётчиками в этот момент.
+Context: The administrator can change parameters at any time — for example, reduce the limit from 200 to 50 or change the window length. The specification does not define what happens to already-accumulated counters at that moment.
 
-Что нужно уточнить: Что происходит с существующими счётчиками IP, когда администратор сохраняет новые настройки?
+What needs clarifying: What happens to existing IP counters when the administrator saves new settings?
 
-Рекомендация: Вариант A — сброс при изменении настроек прост, предсказуем и устраняет неконсистентность между старыми данными и новыми параметрами окна.
+Recommendation: Option A — resetting on settings change is simple, predictable, and eliminates inconsistency between old data and new window parameters.
 
-| Вариант | Описание |
+| Option | Description |
 | :--- | :--- |
-| **A** | **Сбросить все счётчики** — при сохранении новых настроек хранилище счётчиков полностью очищается. Все IP начинают с нуля. Просто и консистентно. |
-| **B** | **Сохранить счётчики** — счётчики продолжают работать, новые настройки применяются только к проверке последующих запросов. Возможна временная неконсистентность (например, метки старше нового окна). |
-| **C** | **Дождаться естественного истечения** — счётчики сами устареют по скользящему окну; перезапуск не нужен. Новые параметры окна применяются к проверке немедленно. |
+| **A** | **Reset all counters** — when new settings are saved, the counter store is fully cleared. All IPs start from zero. Simple and consistent. |
+| **B** | **Keep counters** — counters continue to work; new settings are applied only to checking subsequent requests. Temporary inconsistency is possible (e.g., timestamps older than the new window). |
+| **C** | **Wait for natural expiry** — counters will become stale on their own via the sliding window; no restart needed. New window parameters are applied to checking immediately. |
 
-Принято: сброс всех счётчиков при изменении настроек. Обновляю спецификацию.
+Accepted: reset all counters on settings change. Updating the specification.
 
-**Вопрос 5 из 5: Поведение при переполнении хранилища после очистки устаревших**
+**Question 5 of 5: Behaviour on store overflow after stale eviction**
 
-Контекст: FR-013 определяет, что при достижении лимита записей сначала выполняется очистка устаревших. Но если все записи ещё активны (атака с большого числа уникальных IP одновременно) — места всё равно нет. Поведение в этом крайнем случае не определено.
+Context: FR-013 defines that when the entry limit is reached, stale entries are evicted first. But if all entries are still active (attack from a large number of unique IPs simultaneously) — there is still no space. Behaviour in this edge case is undefined.
 
-Что нужно уточнить: Что делать с новым IP, если после очистки устаревших записей хранилище всё ещё заполнено?
+What needs clarifying: What to do with a new IP if the store is still full after evicting stale entries?
 
-Рекомендация: Вариант A — приоритет защиты над отслеживанием новых IP. При распределённой атаке важнее удерживать уже отслеживаемые IP, чем добавлять новые без ограничений.
+Recommendation: Option A — prioritise protection over tracking new IPs. During a distributed attack it is more important to keep tracking already-known IPs than to add new ones without restriction.
 
-| Вариант | Описание |
+| Option | Description |
 | :--- | :--- |
-| **A** | **Пропустить без отслеживания (fail open)** — новый IP обрабатывается без ограничений, но в лог пишется предупреждение о заполнении хранилища. Доступность важнее полноты защиты. |
-| **B** | **Отклонить запрос (fail closed)** — вернуть 429 новому IP, пока хранилище переполнено. Приоритет безопасности, риск ложных блокировок. |
-| **C** | **Вытеснить самую старую активную запись (LRU)** — освободить место за счёт IP с наиболее давним последним запросом. Хранилище никогда не блокирует новых IP. |
+| **A** | **Pass through without tracking (fail open)** — the new IP is handled without restriction, but a store-full warning is written to the log. Availability over completeness of protection. |
+| **B** | **Reject the request (fail closed)** — return 429 to the new IP while the store is full. Security priority, risk of false blocks. |
+| **C** | **Evict the oldest active entry (LRU)** — free a slot at the expense of the IP with the most distant last request. The store never blocks new IPs. |
 
-Принято: пропустить без отслеживания, записать предупреждение в лог. Финальное обновление спецификации.
+Accepted: pass through without tracking, write a warning to the log. Final specification update.
 
-Задано и принято: 5 вопросов из 5.
-Файл: specs/001-api-rate-limit/spec.md
+5 of 5 questions asked and answered.
+File: specs/001-api-rate-limit/spec.md
 
-Затронутые разделы:
+Sections affected:
 
-- Функциональные требования (FR-006, FR-009, FR-012, FR-013)
-- Ключевые сущности (RateLimitCounter)
-- Раздел «Уточнения» (новый, сессия 2026-05-28)
+- Functional requirements (FR-006, FR-009, FR-012, FR-013)
+- Key entities (RateLimitCounter)
+- "Clarifications" section (new, session 2026-05-28)
 
-Все категории разрешены. Спецификация готова к планированию.
+All categories resolved. The specification is ready for planning.
 </details>
 
-Скилл хорошо нашел проблему утечки памяти, я скорректировал вариант поведения — не просто вытеснять по одной записи, а очищать все устаревшие.
+The skill did well in finding the memory leak issue; I adjusted the behaviour — not just evicting one entry at a time, but clearing all stale ones.
 
-Второе хорошее предложение — логирование критических событий, я посчитал это важным для полноценного использования функционала.
+The second good suggestion was logging critical events, which I considered important for the feature to be fully usable.
 
 <details>
-<summary>Скилл speckit-plan</summary>
+<summary>speckit-plan skill</summary>
 
 **/speckit-plan**
 
-Запускаю setup и загружаю контекст.
+Running setup and loading context.
 
 Ran a command, read a file
-Теперь исследую кодовую базу для Phase 0 — изучу, как в Redmine реализованы похожие механизмы.
+Now exploring the codebase for Phase 0 — looking at how similar mechanisms are implemented in Redmine.
 
 Ran 21 commands
-Достаточно данных для исследования. Пишу все артефакты плана.
+Enough data for the research. Writing all plan artefacts.
 
 Phase 0: Research
 Created research.md +130 -0
@@ -426,113 +424,113 @@ Created research.md +130 -0
 Phase 1: Design & Contracts
 Created 3 files, ran a command
 
-Теперь заполняю plan.md и обновляю CLAUDE.md.
+Now filling in plan.md and updating CLAUDE.md.
 
-Результат планирования
-- Ветка: feature/api-rate-limiting
+Planning result
+- Branch: feature/api-rate-limiting
 - Plan: specs/001-api-rate-limit/plan.md
 
-Созданные артефакты
+Created artefacts
 
-| Файл | Содержание |
+| File | Contents |
 | :--- | :--- |
-| `specs/001-api-rate-limit/research.md` | 8 решений: точка интеграции, алгоритм, потокобезопасность, настройки, логирование |
-| `specs/001-api-rate-limit/data-model.md` | Структура Settings (4 ключа) и in-memory Store; диаграмма состояний |
-| `specs/001-api-rate-limit/contracts/http-headers.md` | Контракт HTTP-заголовков для 200 и 429 ответов |
-| `specs/001-api-rate-limit/quickstart.md` | Инструкция включения, тестирования и чтения логов |
+| `specs/001-api-rate-limit/research.md` | 8 decisions: integration point, algorithm, thread safety, settings, logging |
+| `specs/001-api-rate-limit/data-model.md` | Settings structure (4 keys) and in-memory Store; state diagram |
+| `specs/001-api-rate-limit/contracts/http-headers.md` | HTTP header contract for 200 and 429 responses |
+| `specs/001-api-rate-limit/quickstart.md` | Enable, test, and read logs instructions |
 
-Ключевые архитектурные решения
-- lib/redmine/rate_limit.rb — вся логика, Mutex-protected Store, публичный интерфейс check(ip)
-- prepend_before_action — запуск до аутентификации, только для api_request?
-- Скользящее окно — массив timestamps, очистка при каждом обращении
-- Fail open при overflow — пропускать + warn в лог
-- Сброс хранилища при сохранении любого из rate limit параметров
-- Constitution Check: ✅ все 6 принципов пройдены
+Key architectural decisions
+- lib/redmine/rate_limit.rb — all logic, Mutex-protected Store, public interface check(ip)
+- prepend_before_action — runs before authentication, only for api_request?
+- Sliding window — timestamp array, cleaned on every access
+- Fail open on overflow — pass through + warn to log
+- Store reset when any rate limit parameter is saved
+- Constitution Check: ✅ all 6 principles passed
 
 </details>
 
-Здесь мне не понравилось решение хранить все временные метки в массиве
+I was not happy with the decision to store all request timestamps in an array.
 
 <details>
-<summary>массив timestamps</summary>
+<summary>Timestamp array</summary>
 
-А зачем нам массив timestamps всех запросов в памяти? Давай хранить только количество, значительно сократив использование памяти
+Why do we need an array of all request timestamps in memory? Let's store only counts, significantly reducing memory usage.
 
-Хорошее наблюдение по памяти. Прежде чем обновлять артефакты — важно обозначить последствие.
+Good observation on memory. Before updating the artefacts — an important consequence to flag.
 
-Ситуация: хранить только счётчик (count) — это уже не скользящее окно, а фиксированное (fixed window). Скользящее окно требует знать когда именно каждый запрос пришёл, чтобы понять, какие из них ещё «в окне» прямо сейчас. Без меток времени это невозможно точно.
+Situation: storing only a count (count) — this is no longer a sliding window but a fixed window. A sliding window requires knowing exactly when each request arrived, to determine which ones are still "within the window" right now. Without timestamps this is impossible to do accurately.
 
-Но есть компромиссное решение: аппроксимация скользящего окна через два счётчика (current + previous window). Именно так работают Nginx, Cloudflare, Redis rate limiters:
+But there is a middle-ground solution: sliding window approximation via two counters (current + previous window). This is exactly how Nginx, Cloudflare, and Redis rate limiters work:
 
-| Вариант | Память / IP | Точность | Примечание |
+| Option | Memory / IP | Accuracy | Note |
 | :--- | :--- | :--- | :--- |
-| **Массив timestamps** | до 2 400 байт | Точно | Был выбран в Q1 |
-| **Два счётчика** | ~24 байта | ~99% | Рекомендую |
-| **Один счётчик** | ~16 байт | Fixed window | 2× burst на стыке периодов |
+| **Timestamp array** | up to 2,400 bytes | Exact | Was chosen in Q1 |
+| **Two counters** | ~24 bytes | ~99% | Recommended |
+| **Single counter** | ~16 bytes | Fixed window | 2× burst at period boundary |
 
-Обновляю все артефакты под вариант два счётчика — сохраняем семантику скользящего окна из Q1 и получаем 100-кратное сокращение памяти.
+Updating all artefacts for the two-counter variant — preserving the sliding window semantics from Q1 and achieving a 100× reduction in memory.
 
-Также обновляю формулу X-RateLimit-Reset в контракте — при аппроксимации она считается иначе:
+Also updating the X-RateLimit-Reset formula in the contract — with approximation it is computed differently.
 
-Все артефакты обновлены. Итог изменения:
+All artefacts updated. Summary of the change:
 
-| Характеристика | До (Массив timestamps) | После (Два счётчика) |
+| Characteristic | Before (timestamp array) | After (two counters) |
 | :--- | :--- | :--- |
-| **Структура на IP** | `Array<Float>` (timestamps) | `{prev_count, curr_count, window_start, logged}` |
-| **Память на IP** | до 2 400 байт | ~24 байта (константа) |
-| **Макс. память (10K IP)** | ~24 МБ | ~240 КБ |
-| **Время проверки** | $O(\text{max\_requests})$ | $O(1)$ |
-| **Тип окна** | Точное скользящее | Аппроксимация скользящего (погрешность ≤ 10%) |
-| **2× burst на стыке** | Нет | Нет (в отличие от fixed window) |
+| **Structure per IP** | `Array<Float>` (timestamps) | `{prev_count, curr_count, window_start, logged}` |
+| **Memory per IP** | up to 2,400 bytes | ~24 bytes (constant) |
+| **Max memory (10K IPs)** | ~24 MB | ~240 KB |
+| **Check time** | O(max_requests) | O(1) |
+| **Window type** | Exact sliding | Sliding approximation (≤10% error) |
+| **2× burst at boundary** | No | No (unlike fixed window) |
 
 </details>
 
-Также просмотрел исследования и принятые решения, остальное меня устроило.
+I also reviewed the research decisions; the rest was fine.
 
 <details>
-<summary>Скилл speckit-tasks</summary>
+<summary>speckit-tasks skill</summary>
 
-**/speckit-tasks** удели побольше внимания качественной проработке тестов, убедись в хорошем, но не избыточном покрытии
+**/speckit-tasks** pay extra attention to thorough test design; make sure coverage is good but not excessive.
 
-Загружаю все артефакты для генерации задач.
+Loading all artefacts for task generation.
 
-Генерирую задачи с детальной проработкой тестов на всех уровнях.
+Generating tasks with detailed test coverage at all levels.
 
-Задачи сгенерированы
-Файл: specs/001-api-rate-limit/tasks.md
+Tasks generated
+File: specs/001-api-rate-limit/tasks.md
 
-| Фаза | История | Задач | Тестов |
+| Phase | Story | Tasks | Tests |
 | :--- | :--- | :--- | :--- |
 | **1 — Setup** | — | — | 2 |
-| **2 — Foundation** | — | — | 213 unit-кейсов (T003) |
-| **3 — Enforcement** | US1, US4, US5 | — | 210 integration-кейсов (T005) |
-| **4 — Admin Settings** | US2 | — | 34 functional-кейса (T007) |
-| **5 — Thread Safety** | US6 | — | 11 concurrent unit-тест (T010) |
+| **2 — Foundation** | — | — | 13 unit cases (T003) |
+| **3 — Enforcement** | US1, US4, US5 | — | 10 integration cases (T005) |
+| **4 — Admin Settings** | US2 | — | 4 functional cases (T007) |
+| **5 — Thread Safety** | US6 | — | 1 concurrent unit test (T010) |
 | **6 — Polish** | — | — | 3 |
-| **Итого** | — | — | **328 тест-кейсов** |
+| **Total** | — | — | **33 test cases** |
 
-Покрытие тестами
+Test coverage
 
-Unit (13 кейсов в T003 + 1 в T010): алгоритм Store, sliding window, window slide, overflow (оба варианта), логирование (дедупликация), сброс, потокобезопасность
+Unit (13 cases in T003 + 1 in T010): Store algorithm, sliding window, window shift, overflow (both variants), logging (deduplication), reset, thread safety
 
-Functional (4 кейса в T007): рендер формы настроек, сохранение валидных/невалидных данных, сброс store при сохранении
+Functional (4 cases in T007): settings form rendering, saving valid/invalid data, store reset on save
 
-Integration (10 кейсов в T005): выкл. по умолчанию (US5), золотой путь с заголовками (US4), JSON и XML (Принцип V), 429 при превышении (US1), нейтральное тело (FR-011), верный токен всё равно блокируется, HTML-запросы не ограничиваются (FR-008), сброс окна с Mocha
+Integration (10 cases in T005): disabled by default (US5), golden path with headers (US4), JSON and XML (Principle V), 429 on limit exceeded (US1), neutral body (FR-011), valid token still blocked, HTML requests not limited (FR-008), window reset with travel_to
 
 MVP
 
-Phases 1–3 (T001–T006): rate limiting работает, тесты зелёные, готово к демо
+Phases 1–3 (T001–T006): rate limiting works, tests are green, ready for demo
 
 </details>
 
-### Реализация
+### Implementation
 
-Запустил выполнение, параллельно с анализом получившихся артефактов для экономии времени — если будут замечания попрошу переделать детали, принципиально план задач и их описание перед стартом выглядят хорошо.
+I kicked off the implementation, in parallel reviewing the resulting artefacts to save time — if I had comments I would ask to redo details; at this stage the task plan and descriptions looked good in principle.
 
 <details>
-<summary>Скилл speckit-implement</summary>
+<summary>speckit-implement skill</summary>
 
-**/speckit-implements**
+**/speckit-implement**
 
 Overall: PASS — proceeding to implementation.
 
@@ -630,23 +628,23 @@ All 13 tasks complete. All tests green.
 
 Files created
 
-| Файл | Назначение |
+| File | Purpose |
 | :--- | :--- |
-| `lib/redmine/rate_limit.rb` | Основной модуль: хранилище «два счётчика» (скользящее окно), `Mutex` для потокобезопасности, публичный интерфейс |
-| `test/unit/lib/redmine/rate_limit_test.rb` | 14 unit-тестов (включая 13 базовых и 1 на конкурентность) |
-| `test/integration/api_test/rate_limiting_test.rb` | 11 интеграционных тестов |
+| `lib/redmine/rate_limit.rb` | Core module: two-counter sliding window store, `Mutex` for thread safety, public interface |
+| `test/unit/lib/redmine/rate_limit_test.rb` | 14 unit tests (13 base + 1 concurrency) |
+| `test/integration/api_test/rate_limiting_test.rb` | 11 integration tests |
 
 Files modified:
 
-| Файл | Изменения |
+| File | Changes |
 | :--- | :--- |
-| `config/settings.yml` | Добавлены 4 ключа настроек rate limit |
-| `config/locales/en.yml` | Добавлены 6 ключей I18n (`setting_*`, `error_*`, `label_*`) |
-| `app/controllers/application_controller.rb` | Добавлен `prepend_before_action :check_api_rate_limit` |
-| `app/controllers/settings_controller.rb` | Вызов `reset_store!` при сохранении настроек |
-| `app/models/setting.rb` | Валидация для `max_requests`, `period`, `max_ips > 0` |
-| `app/views/settings/_api.html.erb` | Секция настроек ограничения запросов с 4 полями |
-| `test/functional/settings_controller_test.rb` | 6 функциональных тестов |
+| `config/settings.yml` | 4 rate limit settings keys added |
+| `config/locales/en.yml` | 6 I18n keys added (`setting_*`, `error_*`, `label_*`) |
+| `app/controllers/application_controller.rb` | `prepend_before_action :check_api_rate_limit` added |
+| `app/controllers/settings_controller.rb` | `reset_store!` call on settings save |
+| `app/models/setting.rb` | Validation for `max_requests`, `period`, `max_ips > 0` |
+| `app/views/settings/_api.html.erb` | Rate limit settings section with 4 fields |
+| `test/functional/settings_controller_test.rb` | 6 functional tests |
 
 Test results
 
@@ -659,149 +657,150 @@ Test results
 
 </details>
 
-После попросил запустить линтер
+Afterwards I asked to run the linter.
 
 <details>
-<summary>Линтер + тесты</summary>
+<summary>Linter + tests</summary>
 
-Запусти линтер пожалуйста и после него снова тесты наших задач
+Please run the linter and then the tests for our tasks again.
 
-Что исправил RuboCop:
+What RuboCop fixed:
 
-- evict_stale! — Style/IdenticalConditionalBranches: метод переписан, чтобы approx_count < 1.0 было вынесено из ветвей if/else (теперь обе ветви только вычисляют approx_count, а сравнение — единственный return после)
-- 20.times.map → Array.new(20) в тесте потокобезопасности — Performance/TimesMap
-- assert_response 429 → assert_response :too_many_requests во всех integration-тестах — Rails/HttpStatus
+- evict_stale! — Style/IdenticalConditionalBranches: method rewritten so that `approx_count < 1.0` is extracted from the if/else branches (now both branches only compute `approx_count`, and the comparison is the single return value after)
+- `20.times.map` → `Array.new(20)` in the thread safety test — Performance/TimesMap
+- `assert_response 429` → `assert_response :too_many_requests` in all integration tests — Rails/HttpStatus
 
 </details>
 
-После этого проверил функционал вручную, нашел 2 проблемы:
-- несоответствие контракту: не возвращались человеко-понятные сообщения в теле 429 ответа;
-- баг при включении/отключении функционала через административный раздел
+After this I tested the feature manually and found 2 issues:
+- contract mismatch: human-readable messages were not being returned in the 429 response body;
+- a bug when toggling the feature on/off via the admin panel.
 
 <details>
-<summary>Исправление 1</summary>
+<summary>Fix 1</summary>
 
-А у нас есть тест, который проверяет наличие сообщения в теле ответа заблокированного запроса для соответствия принятым контрактам задачи?
-Я сейчас смотрю вручную и вижу только 429
+Do we have a test that checks for a message in the body of a blocked request, to match the accepted contracts?
+I'm testing manually right now and only see 429.
 
-Нет, такого теста нет — и ты прав: тело сейчас пустое. render_error для API использует format.any { head @status }, что возвращает только статус без тела. Нужно исправить реализацию и добавить тест.
+No, there's no such test — and you're right: the body is currently empty. `render_error` for API uses `format.any { head @status }`, which returns only the status with no body. The implementation and a test need to be fixed.
 
 
 Read a file, edited a file
-Теперь добавляю тесты на тело ответа в integration-тест:
+Now adding tests for the response body to the integration test:
 
 
 Edited a file, ran a command
-13/13. Быстро прогоню линтер на изменённые файлы:
+13/13. Quickly running the linter on the changed files:
 
 
 Ran 3 commands, edited a file
-Линтер чист, 13/13 тестов зелёных. Вот что было сделано:
+Linter clean, 13/13 tests green. What was done:
 
-Проблема: render_error для API-запросов вызывает format.any { head @status } — возвращает только статус, без тела.
+Problem: `render_error` for API requests calls `format.any { head @status }` — returns only the status, no body.
 
-Исправление в check_api_rate_limit (application_controller.rb): заменил render_error на явный respond_to блок с телом по контракту:
+Fix in `check_api_rate_limit` (application_controller.rb): replaced `render_error` with an explicit `respond_to` block with a body matching the contract:
 
-JSON: {"errors": ["Rate limit exceeded. Please try again later."]}
-XML: <errors><error>Rate limit exceeded. Please try again later.</error></errors>
-Добавлены два новых теста в rate_limiting_test.rb:
+JSON: `{"errors": ["Rate limit exceeded. Please try again later."]}`
+XML: `<errors><error>Rate limit exceeded. Please try again later.</error></errors>`
 
-- test_429_json_body_contains_error_message — проверяет структуру JSON через response.parsed_body
-- test_429_xml_body_contains_error_message — проверяет XML через assert_select 'errors error'
+Two new tests added to rate_limiting_test.rb:
+
+- `test_429_json_body_contains_error_message` — checks JSON structure via `response.parsed_body`
+- `test_429_xml_body_contains_error_message` — checks XML via `assert_select 'errors error'`
 
 </details>
 
 <details>
-<summary>Исправление 2</summary>
+<summary>Fix 2</summary>
 
-Добавь еще тест на проверку работы ограничения после изменения параметров ограничения.
+Add a test to verify the rate limiting behaviour after changing the limit parameters.
 
-Я включил ограничение, добился ограничения своих запросов, выключил - запросы стали возвращать данные, включил обратно и вижу ошибку
+I enabled the limit, hit the limit on my requests, disabled it — requests started returning data again — then re-enabled it and saw the error:
 
 comparison of Integer with String failed — if @data.size >= @max_size
 
-Вижу баг. Setting.api_rate_limit_max_ips возвращает String, а @max_size в Store используется в сравнении @data.size >= @max_size (Integer vs String). Это происходит при вызове reset_store! из контроллера настроек без .to_i.
+I see the bug. `Setting.api_rate_limit_max_ips` returns a String, and `@max_size` in Store is used in the comparison `@data.size >= @max_size` (Integer vs String). This happens when `reset_store!` is called from the settings controller without `.to_i`.
 
-Сначала напишем падающий тест:
+Writing the failing test first:
 
 
 Read a file, edited a file
-Запускаем — тест должен упасть:
+Running — the test must fail:
 
 
 Ran a command
-Тест подтверждает баг (500). Теперь фиксируем — добавляем .to_i в reset_store!:
+Test confirms the bug (500). Now fixing it — adding `.to_i` to `reset_store!`:
 
 Edited
 rate_limit.rb +2 -1
-Проверяем, что тест теперь проходит:
+Verifying the test now passes:
 
 Ran
 Run all integration tests including the new toggle test
-14/14. Линтер:
+14/14. Linter:
 
 Ran
 Lint fixed files
-Чисто. Полный прогон всех наших тестов:
+Clean. Full run of all our tests:
 
 Ran
 Full test suite run
-54 теста, 0 падений.
+54 tests, 0 failures.
 
-Что было сделано:
+What was done:
 
-Баг: Setting.api_rate_limit_max_ips возвращает String (так работают все Redmine settings — даже с format: int). При вызове reset_store!(max_size: Setting.api_rate_limit_max_ips) в Store попадала строка "10000", и затем @data.size >= @max_size падало с ArgumentError: comparison of Integer with String failed.
+Bug: `Setting.api_rate_limit_max_ips` returns a String (that's how all Redmine settings work — even with `format: int`). When `reset_store!(max_size: Setting.api_rate_limit_max_ips)` was called, the string `"10000"` would end up in Store, and then `@data.size >= @max_size` would raise `ArgumentError: comparison of Integer with String failed`.
 
-Фикс в reset_store! — добавил .to_i при создании нового Store. Метод теперь явно коерсит аргумент, что защищает от строк из настроек независимо от того, как его вызывают.
+Fix in `reset_store!` — added `.to_i` when creating the new Store. The method now explicitly coerces the argument, protecting against strings from settings regardless of how it is called.
 
-Тест test_toggle_rate_limiting_on_off_on_does_not_raise воспроизводит весь цикл, который ты описал: включить → исчерпать лимит → выключить → включить через reset_store! со строковым значением из настроек → убедиться что запрос проходит без ошибки.
+The test `test_toggle_rate_limiting_on_off_on_does_not_raise` reproduces the full cycle you described: enable → exhaust the limit → disable → re-enable via `reset_store!` with a string value from settings → verify the request passes without error.
 
 </details>
 
-Посмотрел тесты самостоятельно и показал их внешней модели, из критичного решил исправить отсутствие travel_to (использовался Time.stubs(:now))
+I reviewed the tests myself and ran them past an external model; the most important thing I decided to fix was the absence of `travel_to` (`Time.stubs(:now)` was being used).
 
-Просмотрел изменения в коде и Service Object RateLimit особенно.
+I reviewed the changes in the code and the `RateLimit` module in particular.
 
-Мне не понравилось наличие публичного доступа store_size, он был необходим только тестам для контроля содержимого. Посчитал это плохим паттерном юнит-теста: проверкой имплементации, а не поведения — нам важно, чтобы при блокировке не количество записей увеличивается на 1, а что при привышении лимита блокируются.
+I was not happy that `store_size` was publicly accessible — it was only needed by tests to verify internal state. I considered this a poor unit test pattern: testing implementation rather than behaviour — what matters is not that the number of entries increases by 1 on a block, but that requests are blocked when the limit is exceeded.
 
 <details>
-<summary>Исправление 3</summary>
+<summary>Fix 3</summary>
 
-А уточни, для чего у нас публично доступен store_size в RateLimit?
-Да, давай сделаем проверку именно поведения
+Can you clarify why store_size is publicly accessible in RateLimit?
+Yes, let's verify behaviour instead.
 
-Смотрю все тесты с store_size и планирую замену:
+Looking at all tests that use store_size and planning the replacements:
 
 
 Read 2 files
-Картина ясна. Делаю три правки одновременно:
+The picture is clear. Making three changes simultaneously:
 
-- test_overflow_evicts_stale_entries_and_allows_new_ip — убрать assert_equal 3, store_size (избыточно: 3 вызова уже наполнили store) и assert store_size <= 3 (уже проверяется через :allowed vs :untracked)
-- test_clear_empties_store — переписать: исчерпать лимит → убедиться что denied → сбросить → убедиться что allowed
-- test_save_rate_limit_settings_resets_store — то же: заблокировать IP → сохранить настройки → убедиться что allowed
+- `test_overflow_evicts_stale_entries_and_allows_new_ip` — remove `assert_equal 3, store_size` (redundant: 3 calls already filled the store) and `assert store_size <= 3` (already checked via `:allowed` vs `:untracked`)
+- `test_clear_empties_store` — rewrite: exhaust the limit → assert denied → reset → assert allowed
+- `test_save_rate_limit_settings_resets_store` — same: block an IP → save settings → assert allowed
 
 Edited 2 files
-Теперь удаляю store_size из rate_limit.rb:
+Now removing store_size from rate_limit.rb:
 
 Edited rate_limit.rb +0 -5
-Запускаем все три набора тестов:
+Running all three test suites:
 
 Ran 2 commands
-54 теста, 0 падений, линтер чист.
+54 tests, 0 failures, linter clean.
 
-Итог изменений:
+Summary:
 
-store_size удалён из публичного интерфейса Redmine::RateLimit. Три теста переписаны на поведение:
+`store_size` removed from the `Redmine::RateLimit` public interface. Three tests rewritten to verify behaviour:
 
 </details>
 
-Далее попросил убрать использование Rails.logger.warn прямо внутри RateLimit, посчитал это ненужной зависимостью класса от Rails
+I then asked to move `Rails.logger.warn` out of `RateLimit`, seeing it as an unnecessary dependency of the class on Rails.
 
 <details>
-<summary>Исправление 3</summary>
+<summary>Fix 4</summary>
 
-Я вижу Rails.logger.warn внутри RateLimit - давай перенесем его на уровень выше.
-Пусть RateLimit возвращает только флаг необходимости логирования
+I see Rails.logger.warn inside RateLimit — let's move it up a level.
+Let RateLimit only return a flag indicating whether logging is needed.
 
 Now I have all the context. Let me implement the changes across all three files.
 
@@ -837,24 +836,25 @@ test/unit/lib/redmine/rate_limit_test.rb — the two logging tests are renamed a
 
 </details>
 
-Финально запустил всё тесты проекта и еще раз проверил вручную функционал.
+Finally I ran the full project test suite and manually verified the feature one more time.
 
-## Итог
-Выполнение заняло около 2 часов. Часто не хватало знания Rails и проекта Redmine, если бы было больше времени, я бы глубже изучил их.
+## Summary
 
-Часто возникали проблемы кодогенерации из-за неточности собранной фундаментальной информации, в проектах, где конституция составляется более тщательно, они бы не возникали.
+The task took about 2 hours. Lack of familiarity with Rails and the Redmine project was a frequent obstacle; with more time I would have studied them more deeply.
 
-Также больше бы поработал с набором тестов, некоторые мне кажутся избыточными (например тест на нераскрытие валидных токенов), и лучше бы вник в основной код RateLimit
+Code generation issues arose frequently due to inaccuracies in the collected foundational information — in projects where the constitution is assembled more carefully these would not occur.
 
-## Список основных  trade-offs
+I would also have spent more time on the test suite — some tests seem redundant (for example the test for not revealing valid tokens), and I would have looked more closely at the core RateLimit code.
 
-- отказ от распределенных систем для хранения информации о блокировках (например Redis)
-- блокировка только на основе IP (token-based не защищала бы от перебора токенов)
-- использвоание prepend_before_action вместо middleware (функционал шире, чем http-only слой, использование готовых хелперов контроллера, системы локализации)
-- сброс счетчиков при изменении настроек (отсутствие миграции -> проще реализация, но в момент смены заблокированные IP снова будут активны)
-- отключение блокировки при привышении лимита памяти (выбрана стабильность инфраструктуры и доступ для легитимных пользователей)
+## Key trade-offs
 
-## Скриншоты
+- Dropped distributed storage for counter data (e.g. Redis) — no external dependency, simpler deployment, at the cost of non-persistence across restarts and per-process counters
+- IP-based blocking only (token-based would not protect against token brute-force, since most attack requests are unauthenticated)
+- `prepend_before_action` instead of Rack middleware — the feature needs more than the HTTP layer (Settings, I18n, controller helpers), and future token-based extension would need model-level access too
+- Full counter reset on settings change — no migration logic means simpler implementation, but at the moment of change previously blocked IPs are temporarily unblocked
+- Fail open when store memory is exhausted — infrastructure stability and access for legitimate users take priority over blocking unknown IPs
 
-![Блокировка запроса](Screenshot%201.png)
-![Администрирование](Screenshot%202.png)
+## Screenshots
+
+![Blocked request](Screenshot%201.png)
+![Admin settings](Screenshot%202.png)

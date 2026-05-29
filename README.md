@@ -52,11 +52,13 @@ Brief documentation covering:
 
 </details>
 
-## Pull Request
+## Result
 
-[Add IP-based API rate limiting to protect against token brute-force](https://github.com/ellhee/redmine/pull/2)
+[Pull Request: Add IP-based API rate limiting to protect against token brute-force](https://github.com/ellhee/redmine/pull/2)
 
 [Quickstart](https://github.com/ellhee/redmine/blob/001-api-rate-limit/specs/001-api-rate-limit/quickstart.md)
+
+[RU version](README.ru.md)
 
 ## Slice selection
 
